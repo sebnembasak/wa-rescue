@@ -1,0 +1,1581 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>warescue: nasıl çalışır / how it works</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M6 3h20a4 4 0 0 1 4 4v13a4 4 0 0 1-4 4H14l-7 6v-6H6a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4z' fill='%232E7D4F'/%3E%3Cpath d='M10.5 13.5a5.5 5.5 0 1 0 2-4.2' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M12.2 6.2v3.4h3.4' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light dark;
+    --desk: #D9DCE0; --window: #FFFFFF; --side: #EEEFF1; --bar: #F3F4F5;
+    --edge: #A9AEB5; --line: #D3D6DA; --text: #1D1F22; --dim: #6B7078;
+    --done: #2E7D4F; --error: #B3261E; --have: #B5BAC1;
+    --r-len: #B8721F; --r-flag: #8350AE; --r-proto: #2B76A0; --r-iv: #0F8C8C;
+    --r-cipher: #6A7686; --r-tag: #B0443A; --r-mask: #9AA4B0;
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --desk: #18191B; --window: #26282B; --side: #2D2F33; --bar: #2A2C30;
+      --edge: #4A4E54; --line: #3A3D42; --text: #E6E7E9; --dim: #A0A4AB;
+      --done: #6CC28F; --error: #F2867E; --have: #5A5F66;
+      --r-len: #E2A04F; --r-flag: #B88BE0; --r-proto: #6BB4DC; --r-iv: #4CC6C2;
+      --r-cipher: #8E9BAB; --r-tag: #E7796D; --r-mask: #7A8592;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--desk); color: var(--text); padding: 28px 16px; }
+  [hidden] { display: none !important; }
+  a { color: inherit; }
+  code, pre, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  code { background: var(--side); padding: 0 4px; border-radius: 3px; overflow-wrap: anywhere; }
+  :focus-visible { outline: 2px solid var(--done); outline-offset: 2px; }
+
+  .window {
+    max-width: 1060px; margin: 0 auto; background: var(--window);
+    border: 1px solid var(--edge); border-radius: 6px; overflow: hidden;
+    box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+  }
+  .titlebar {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+    padding: 7px 14px; background: var(--bar); border-bottom: 1px solid var(--line);
+    font-size: 13px; color: var(--dim);
+  }
+  .titlebar .back { justify-self: start; text-decoration: none; color: var(--text); }
+  .titlebar .back:hover { text-decoration: underline; }
+  .titlebar .name { font-weight: 600; color: var(--dim); text-align: center; }
+  .titlebar label { justify-self: end; }
+  .titlebar select { font: inherit; margin-left: 4px; }
+
+  .doc { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 560px; }
+  nav.toc { background: var(--side); border-right: 1px solid var(--line); padding: 18px 0; font-size: 13px; }
+  nav.toc p { margin: 0 18px 8px; color: var(--dim); font-size: 12px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; }
+  nav.toc a { display: flex; gap: 8px; padding: 4px 18px; text-decoration: none; color: var(--dim); }
+  nav.toc a:hover { color: var(--text); }
+  nav.toc a .n { min-width: 1.5em; }
+  nav.toc a[aria-current="page"] { color: var(--text); font-weight: 600; }
+  nav.toc a[aria-current="page"] .n::before { content: "● "; font-size: 9px; vertical-align: 2px; }
+
+  main { padding: 26px 36px 30px; min-width: 0; }
+  .meta { font-size: 12px; color: var(--dim); margin: 0 0 2px; }
+  h2 { font-size: 19px; font-weight: 600; margin: 0 0 12px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 20px 0 6px; }
+  p { margin: 0 0 10px; }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; }
+  li { margin: 0 0 4px; }
+  .dim { color: var(--dim); }
+
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--side); font-weight: 600; }
+  pre {
+    background: var(--side); border: 1px solid var(--line); border-radius: 4px;
+    padding: 10px 12px; overflow-x: auto; line-height: 1.5; margin: 8px 0 14px;
+  }
+  pre .c { color: var(--dim); }
+  .box { border: 1px solid var(--line); background: var(--side); border-radius: 4px; padding: 10px 14px; margin: 10px 0 14px; }
+  .box > :last-child { margin-bottom: 0; }
+  .ok { color: var(--done); }
+  .no { color: var(--error); }
+
+  .pager {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    background: var(--bar); border-top: 1px solid var(--line);
+  }
+  .pager .spacer { flex: 1; }
+  .pager .where { font-size: 12px; color: var(--dim); }
+  .pager button { font: inherit; font-size: 14px; min-width: 84px; }
+
+  ol.story { list-style: none; padding: 0; margin: 14px 0 18px 12px; border-left: 2px solid var(--line); counter-reset: st; }
+  ol.story li { position: relative; padding: 0 0 12px 24px; counter-increment: st; }
+  ol.story li::before {
+    content: counter(st); position: absolute; left: -12px; top: 1px; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--window); border: 2px solid var(--line); font: 600 11px/18px ui-monospace, Menlo, monospace;
+    text-align: center; color: var(--dim);
+  }
+  ol.story li.bad::before { border-color: var(--error); color: var(--error); }
+  ol.story li.good::before { border-color: var(--done); color: var(--done); }
+
+  .chart { margin: 10px 0 6px; }
+  .c-row, .c-axis { display: grid; grid-template-columns: 96px minmax(0, 1fr) 100px; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .c-name { font-weight: 600; font-size: 13.5px; line-height: 1.25; }
+  .c-name small { display: block; font-weight: 400; color: var(--dim); font-size: 12px; }
+  .c-track { position: relative; height: 20px; background: var(--side); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .c-track i { position: absolute; top: 0; bottom: 0; }
+  .c-track i.have { background: var(--have); }
+  .c-track i.add { background: var(--done); }
+  .c-num { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .c-axis { margin-top: -4px; }
+  .c-years { position: relative; height: 16px; font-size: 11px; color: var(--dim); }
+  .c-years span { position: absolute; transform: translateX(-50%); }
+  .key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--dim); margin: 6px 0 12px; }
+  .key b { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; border-radius: 2px; }
+  .key b.have { background: var(--have); }
+  .key b.add { background: var(--done); }
+  .key b.open { border: 1px dashed var(--dim); }
+
+  .gaps { margin: 10px 0 4px; }
+  .g-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+  .g-track { position: relative; height: 18px; }
+  .g-track i { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+  .g-track i.have { background: var(--have); }
+  .g-track i.add { background: var(--done); }
+  .g-track i.export { background: var(--r-proto); opacity: 0.5; }
+  .g-track i.open { border: 1px dashed var(--dim); }
+  .g-labels { position: relative; height: 34px; margin-left: 108px; font-size: 11.5px; color: var(--dim); }
+  .g-labels span { position: absolute; transform: translateX(-50%); text-align: center; line-height: 1.25; white-space: nowrap; }
+
+  .sorts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 10px 0 14px; }
+  .sorts h4 { margin: 0 0 6px; font-size: 13px; }
+  .sorts ol { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; }
+  .sorts li { display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 4px 8px; margin: 0; border-top: 1px solid var(--line); }
+  .sorts li:first-child { border-top: 0; }
+  .sorts li .s { font-family: ui-monospace, Menlo, monospace; color: var(--dim); }
+  .sorts li.add { background: color-mix(in srgb, var(--done) 14%, transparent); }
+  .sorts li.new { font-weight: 600; }
+  .sorts li.new.bad { background: color-mix(in srgb, var(--error) 14%, transparent); }
+
+  main a:not(.toc a) { color: var(--done); text-decoration: underline; text-underline-offset: 2px; }
+  .pipe {
+    display: grid; gap: 8px 4px; align-items: center; margin: 12px 0 18px; font-size: 13px;
+    grid-template-columns: minmax(0,1.2fr) 18px minmax(0,0.9fr) 18px minmax(0,1.1fr) 18px minmax(0,1fr) 18px minmax(0,1fr);
+    grid-template-areas: "in1 a1 s1 d1 m am e ae o" "in2 a2 s2 d2 m am e ae o";
+  }
+  .pipe > div { border: 1px solid var(--edge); border-radius: 4px; padding: 7px 9px; background: var(--window); line-height: 1.35; }
+  .pipe > div.in { background: var(--side); }
+  .pipe > div.tall { align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+  .pipe > div.out { background: color-mix(in srgb, var(--done) 14%, transparent); border-color: var(--done); }
+  .pipe > div b { display: block; font-size: 12px; color: var(--dim); font-weight: 600; }
+  .pipe > i { font-style: normal; color: var(--dim); text-align: center; }
+  .pipe > i.r::after { content: "→"; }
+  .pipe > i.d1::after { content: "↘"; }
+  .pipe > i.d2::after { content: "↗"; }
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0 16px; font-size: 13px; }
+  .flow span { border: 1px solid var(--edge); border-radius: 3px; padding: 4px 8px; background: var(--window); }
+  .flow span.in { background: var(--side); }
+  .flow i { color: var(--dim); font-style: normal; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin: 10px 0 14px; }
+  .card { border: 1px solid var(--line); border-radius: 4px; padding: 10px 14px; }
+  .card h3 { margin-top: 2px; }
+  .card ol { margin-bottom: 0; }
+
+  .layoutbar { display: flex; height: 30px; margin: 10px 0 2px; border: 1px solid var(--edge); font-size: 11px; }
+  .layoutbar span { display: flex; align-items: center; justify-content: center; color: #fff; white-space: nowrap; overflow: hidden; padding: 0 4px; }
+  .layoutscale { display: flex; font-size: 11px; color: var(--dim); margin-bottom: 14px; }
+  .layoutscale span { text-align: center; }
+
+  .hex { position: relative; border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; margin: 10px 0 16px; }
+  .hex .cap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--dim); margin-bottom: 10px; }
+  .hex .row { display: flex; gap: 14px; align-items: center; margin-bottom: 4px; }
+  .hex .off { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--dim); }
+  .hex .bytes { display: flex; flex-wrap: wrap; gap: 3px; }
+  .hex button.b {
+    font: 15px/1 ui-monospace, Menlo, Consolas, monospace; color: var(--text); cursor: pointer;
+    background: color-mix(in srgb, var(--rc) 16%, transparent); border: 0; border-bottom: 3px solid var(--rc);
+    border-radius: 3px 3px 0 0; padding: 5px 4px 3px; min-width: 2.2em;
+  }
+  .hex button.b.gap { margin-left: 10px; }
+  .hex button.b:hover { background: color-mix(in srgb, var(--rc) 30%, transparent); }
+  .hex button.b.on { background: color-mix(in srgb, var(--rc) 42%, transparent); }
+  .hex .legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
+  .hex .legend button {
+    font: inherit; font-size: 12.5px; background: var(--window); color: var(--text);
+    border: 1px solid var(--line); border-radius: 3px; padding: 3px 9px; cursor: pointer;
+  }
+  .hex .legend button[aria-pressed="true"] { border-color: var(--text); }
+  .hex .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; background: var(--rc); vertical-align: -1px; border-radius: 2px; }
+  .pop {
+    position: absolute; z-index: 5; width: min(320px, calc(100% - 28px)); padding: 10px 12px;
+    background: var(--window); color: var(--text); border: 1px solid var(--edge); border-top: 3px solid var(--rc);
+    border-radius: 4px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.2); font-size: 13px;
+  }
+  .pop strong { display: block; margin-bottom: 2px; }
+
+  @media (max-width: 760px) {
+    body { padding: 0; }
+    .window { border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
+    .titlebar { grid-template-columns: 1fr auto; }
+    .titlebar .name { display: none; }
+    .doc { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+    nav.toc { border-right: 0; border-bottom: 1px solid var(--line); }
+    nav.toc ol { display: none; }
+    nav.toc p { margin-bottom: 0; }
+    main { padding: 18px 16px 24px; }
+    .c-row, .c-axis, .g-row { grid-template-columns: 1fr; gap: 4px; }
+    .c-num { text-align: left; }
+    .g-labels { margin-left: 0; }
+    .sorts { grid-template-columns: 1fr; }
+    .pipe { grid-template-columns: 1fr; grid-template-areas: "in1" "a1" "s1" "in2" "a2" "s2" "d2" "m" "am" "e" "ae" "o"; }
+    .pipe > i.d1 { display: none; }
+    .pipe > i.r::after, .pipe > i.d2::after { content: "↓"; }
+    .hex .off { display: none; }
+  }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .window { border: 0; box-shadow: none; max-width: none; }
+    nav.toc, .titlebar, .pager { display: none; }
+    .doc { grid-template-columns: 1fr; }
+    main section { display: block !important; break-inside: avoid-page; margin-bottom: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <a class="back" href="/" id="back">← Sihirbaza dön</a>
+    <span class="name" id="title-text">warescue: nasıl çalışır</span>
+    <label><span id="lang-label">Dil</span>
+      <select id="lang">
+        <option value="tr">Türkçe</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+  </div>
+
+<div class="doc" data-lang="tr" lang="tr">
+  <nav class="toc" aria-label="İçindekiler">
+    <p>İçindekiler</p>
+    <ol></ol>
+  </nav>
+  <main>
+
+<section data-id="tr-olay" data-title="Projenin geliştirilmesine yol açan olay">
+  <p class="meta">warescue 0.3.0 · teknik açıklama</p>
+  <h2>Projenin geliştirilmesine yol açan olay</h2>
+  <p>Bu proje gerçek bir veri kaybının ardından geliştirildi. Telefonun dil ayarı değiştirildikten sonra WhatsApp sohbet geçmişi açılamaz hale geldi. Uygulama yeniden kuruldu ama geri yükleme adımı çalışmadı ve tüm sohbetler silindi. Google Drive yedeği yoktu. Telefondaki günlük yedekler de uygulamayla birlikte silinmişti.</p>
+  <ol class="story">
+    <li class="bad"><b>Dil değişikliği.</b> Sohbet geçmişi açılamadı ve uygulama yeniden kuruldu.</li>
+    <li><b>Eski bir yedek bulundu.</b> Daha önce elle kopyalanmış, Ekim 2024 tarihli bir yerel yedek vardı.</li>
+    <li class="good"><b>Ekim 2024'e kadarki geçmiş geri geldi.</b> Dosya doğru klasöre taşınıp yeniden adlandırıldıktan sonra WhatsApp yedeği tanıdı.</li>
+    <li><b>Sonraki dönem eksikti.</b> Ekim 2024 sonrası yalnızca karşı tarafların telefonlarında duruyordu. Kurtarmak istenen sohbetler karşı taraftan "dışa aktar" ile istendi.</li>
+    <li><b>Okunabilir bir yedek alındı.</b> Uçtan uca şifreli yedek 64 basamaklı anahtarla açıldı ve yedek crypt15 biçimine geçti.</li>
+    <li class="good"><b>Eksik dönemler eklendi.</b> Dışa aktarımlardaki mesajlar warescue ile yedeğe yerleştirildi ve yedek telefona geri yüklendi.</li>
+  </ol>
+  <h3>Sonuç</h3>
+  <p>Üç sohbete yaklaşık <b>170.000</b> mesaj eklendi ve hepsi telefonda WhatsApp içinden okunabilir oldu. Yedekte zaten bulunan 950.000'i aşkın mesajın hiçbiri değişmedi.</p>
+  <div class="chart" data-chart="outcome"></div>
+  <div class="key"><span><b class="have"></b>2024 yedeğinde zaten olan</span><span><b class="add"></b>dışa aktarımdan eklenen</span><span>Çubuklar yaklaşıktır.</span></div>
+  <h3>Örnek durumlar</h3>
+  <p>Üç sohbetin durumu birbirinden farklıydı. Her biri algoritmanın ayrı bir yönünü gösterir.</p>
+  <table>
+    <tr><th>Sohbet</th><th>Durum</th><th>Nasıl dolduruldu</th></tr>
+    <tr><td>Kişi 1</td><td>Yedekte 2019'dan Ekim 2024'e kadar geçmiş vardı. Geri yüklemeden sonra da yazışılmıştı.</td><td>Aradaki iki yıl, iki mesajın arasındaki boşluğa yerleşti.</td></tr>
+    <tr><td>Kişi 2</td><td>Karşı taraftaki sohbet 2025 ortasından başlıyordu.</td><td>Dışa aktarımda olan dönem eklendi. Ağustos 2024 ile Haziran 2025 arası iki tarafta da olmadığı için boş kaldı.</td></tr>
+    <tr><td>Kişi 3</td><td>Yedekte 2019 ile 2020 arasında da bir kopukluk vardı. Geri yüklemeden sonra hiç yazışılmamıştı.</td><td>İki boşluk birden dolduruldu. Biri iki mesajın arasındaydı, diğeri sohbetin sonundaki açık uçtaydı.</td></tr>
+  </table>
+</section>
+
+<section data-id="tr-kullanim-alani" data-title="Ne zaman kullanılır?">
+  <h2>Ne zaman kullanılır?</h2>
+  <p>warescue, bir kişiyle olan yazışmanız sizin telefonunuzda eksik ama karşı tarafın telefonunda duruyorsa işe yarar. Ekleme yalnızca seçtiğiniz kişinin sohbetine yapılır. Diğer sohbetlerinize ve mevcut mesajlarınıza dokunulmaz.</p>
+  <div class="cards">
+    <div class="card"><h3>Bir sohbeti kendinizden sildiniz</h3><p>Bir kişiyle olan sohbeti kendi telefonunuzdan sildiniz ve şimdi geri istiyorsunuz. Diğer bütün sohbetleriniz yerinde duruyor. Karşı tarafın dışa aktarımıyla yalnızca o sohbet geri gelir.</p></div>
+    <div class="card"><h3>Sohbeti temizlediniz</h3><p>"Sohbeti temizle" ile bir kişiyle olan bütün mesajları sildiniz. Sohbet listede duruyor ama içi boş. Bütün geçmiş dışa aktarımdan geri eklenir.</p></div>
+    <div class="card"><h3>Geri yükleme atlandı</h3><p>Uygulama yeniden kurulurken "Geri yükle" yerine "Atla" seçildi ve sohbetler boş geldi.</p></div>
+    <div class="card"><h3>Elinizdeki yedek eski</h3><p>Yedek belli bir tarihe kadar geri geldi. O tarihten sonraki mesajlar yok.</p></div>
+    <div class="card"><h3>Telefon değişti</h3><p>Eski telefon bozuldu, kayboldu ya da yedek yeni telefona taşınamadı. Yeni telefonda geçmiş yok ama karşı tarafta duruyor.</p></div>
+    <div class="card"><h3>Sohbet geçmişi bozuldu</h3><p>Bir güncelleme ya da ayar değişikliğinden sonra geçmiş açılmadı ve uygulama sıfırlandı.</p></div>
+    <div class="card"><h3>Bir dönem eksik</h3><p>Bir sohbette aylarca süren bir kopukluk var. Örneğin bir süre başka bir telefon kullanıldı ve o dönemin yedeği alınmadı.</p></div>
+    <div class="card"><h3>Uygulama kaldırılıp kuruldu</h3><p>WhatsApp kaldırıldığında telefondaki yerel yedekler de silindi. Google Drive yedeği de yoktu.</p></div>
+  </div>
+  <h3>Bilinmesi gerekenler</h3>
+  <ul>
+    <li>Sohbet listede hiç görünmüyorsa önce o kişiyle bir mesajlaşın, sonra yedek alın. "Hangi durumdayım?" bölümündeki B durumu bunu anlatır.</li>
+    <li>Sohbetin içinden tek tek silinen mesajlar 30 günden kısa bir aralıktaysa varsayılan ayarla geri eklenmez. Komut satırında <code>--min-gap-days</code> ile bu eşiği küçülterek kullanırsanız daha kısa aralıktaki mesajlarınızı da geri kurtarabilirsiniz.</li>
+    <li>Karşı taraf da sohbeti silmişse mesajların kaynağı kalmamıştır.</li>
+  </ul>
+</section>
+
+<section data-id="tr-durum" data-title="Hangi durumdayım?">
+  <h2>Hangi durumdayım?</h2>
+  <p>warescue'nun çalışması için eski bir yedek gerekmez. İki şey yeterlidir. Biri telefonunuzdan alınmış herhangi bir uçtan uca şifreli yedek, diğeri karşı tarafın telefonundaki sohbetin dışa aktarımıdır. Eksik mesajlar dışa aktarımdan gelir. Yedek yalnızca onların yerleştirileceği kaptır.</p>
+  <div class="cards">
+    <div class="card">
+      <h3>A. Elimde eski bir yedek var</h3>
+      <p class="dim">Geçmiş bir tarihe kadar geri geldi, sonrası yok.</p>
+      <ol>
+        <li>Eski yedeği geri yükleyin. Dosyanın nerede durması ve nasıl adlandırılması gerektiği "WhatsApp yedekleri" bölümündedir.</li>
+        <li><a href="#tr-anahtar">64 basamaklı anahtarla uçtan uca şifreli yedek alın.</a></li>
+        <li>Karşı taraftan <a href="#tr-disa-aktarma">dışa aktarım</a> isteyin ve sihirbazı kullanın. Eksik dönem iki mesajın arasına ya da sohbetin sonuna yerleşir.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>B. Hiç yedeğim yok</h3>
+      <p class="dim">WhatsApp sıfırdan kuruldu ve bütün sohbetler boş.</p>
+      <ol>
+        <li>Kurtarmak istediğiniz her kişiye bir mesaj gönderin ya da onlardan bir mesaj alın. Böylece sohbet yedekte yer alır.</li>
+        <li><a href="#tr-anahtar">64 basamaklı anahtarla uçtan uca şifreli yedek alın.</a></li>
+        <li>Karşı taraftan <a href="#tr-disa-aktarma">dışa aktarım</a> isteyin ve sihirbazı kullanın. Geçmişin tamamı yeni mesajınızın öncesine yerleşir.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>C. Yedeğim güncel ama bazı dönemler eksik</h3>
+      <p class="dim">Bir sohbette aylarca süren bir kopukluk var.</p>
+      <ol>
+        <li><a href="#tr-anahtar">64 basamaklı anahtarla uçtan uca şifreli yedek alın.</a></li>
+        <li><a href="#tr-disa-aktarma">Dışa aktarımı</a> ekleyin. 30 günden uzun her kopukluk doldurulur. Hangi dönemlerin dolduğu önizlemede görünür.</li>
+      </ol>
+    </div>
+  </div>
+  <h3>Gerekenler</h3>
+  <ul>
+    <li>Android telefon ve Windows, macOS ya da Linux çalışan bir bilgisayar</li>
+    <li>Dosyayı telefonla bilgisayar arasında taşımanın bir yolu. USB kablo ya da yedeği internet üzerinden gönderme gibi yöntemler kullanılabilir.</li>
+    <li>Bilgisayarda Python 3.10 veya üstü ve warescue kurulumu (README dosyasında anlatılır)</li>
+    <li>Her sohbet için karşı tarafın "Medya olmadan" seçeneğiyle gönderdiği <a href="#tr-disa-aktarma">dışa aktarım dosyası</a></li>
+    <li>Yedeği alırken seçtiğiniz <a href="#tr-anahtar">64 basamaklı anahtar</a></li>
+  </ul>
+  <h3>warescue'nun yardımcı olamayacağı durumlar</h3>
+  <ul>
+    <li>Karşı taraf da sohbeti silmişse ya da sohbet onda hiç yoksa mesajların kaynağı kalmamıştır.</li>
+    <li>Grup sohbetleri henüz desteklenmiyor.</li>
+    <li>Kendi telefonunuz iPhone ise yedek okunamaz. Karşı tarafın iPhone kullanması ise sorun değildir.</li>
+    <li>Fotoğraf, video ve ses kayıtları dışa aktarımda bulunmaz. Bunların yerine bir not eklenir.</li>
+  </ul>
+</section>
+
+<section data-id="tr-anahtar" data-title="64 basamaklı anahtarla yedek alma">
+  <h2>64 basamaklı anahtarla yedek alma</h2>
+  <p>warescue yalnızca 64 basamaklı anahtarla alınmış uçtan uca şifreli yedekleri açabilir. Bu ayar bir kez yapılır. Sonraki bütün yedekler aynı anahtarla şifrelenir.</p>
+  <ol>
+    <li>WhatsApp'ı açın ve <b>Ayarlar › Sohbetler › Sohbet yedeği</b> bölümüne girin.</li>
+    <li><b>Uçtan uca şifreli yedek</b>'e dokunun ve <b>Aç</b>'ı seçin.</li>
+    <li>Parola oluşturma ekranında <b>Parola yerine 64 basamaklı şifreleme anahtarı kullan</b> seçeneğine dokunun.</li>
+    <li>Ekranda 64 basamaklı anahtar görünür. Bu anahtarı bir şifre yöneticisine ya da kâğıda yazın. Ekran görüntüsü olarak telefonda saklamayın.</li>
+    <li>Anahtarı kaydettiğinizi onaylayın ve <b>Oluştur</b>'a dokunun.</li>
+    <li>Sohbet yedeği ekranına dönün ve <b>Yedekle</b>'ye dokunun. Yedeğin bitmesini bekleyin.</li>
+    <li>Telefonu bilgisayara bağlayın ve <code>Android/media/com.whatsapp/WhatsApp/Databases/msgstore.db.crypt15</code> dosyasını bilgisayara kopyalayın.</li>
+  </ol>
+  <div class="box">
+    <p>Anahtar kaybolursa yedek hiçbir şekilde açılamaz. WhatsApp da anahtarı geri getiremez.</p>
+    <p>Anahtar yalnızca bu telefondaki yerel yedekleri değil Google Drive yedeklerini de şifreler.</p>
+  </div>
+  <p>Sihirbazda anahtar boşluklu ya da boşluksuz yazılabilir. Anahtar diske yazılmaz ve yalnızca oturum açıkken bellekte tutulur.</p>
+</section>
+
+<section data-id="tr-disa-aktarma" data-title="Sohbeti dışa aktarma">
+  <h2>Sohbeti dışa aktarma</h2>
+  <p>Eksik mesajlar karşı tarafın telefonundaki sohbetten gelir. Bu adımları karşı taraf kendi telefonunda yapar. Aşağıdaki metni ona olduğu gibi gönderebilirsiniz.</p>
+  <h3>Android</h3>
+  <ol>
+    <li>WhatsApp'ta sizinle olan sohbeti açın.</li>
+    <li>Sağ üstteki <b>⋮</b> menüsüne, ardından <b>Diğer › Sohbeti dışa aktar</b>'a dokunun.</li>
+    <li><b>Medya olmadan</b>'ı seçin.</li>
+    <li>Dosyayı e-posta, Google Drive ya da WhatsApp'ta belge olarak gönderin.</li>
+  </ol>
+  <h3>iPhone</h3>
+  <ol>
+    <li>WhatsApp'ta sizinle olan sohbeti açın.</li>
+    <li>Ekranın üstündeki kişi adına dokunun.</li>
+    <li>Sayfanın altındaki <b>Sohbeti Dışa Aktar</b>'a dokunun ve <b>Medya Olmadan</b>'ı seçin.</li>
+    <li>Oluşan ZIP dosyasını e-posta, iCloud Drive ya da WhatsApp'ta belge olarak gönderin.</li>
+  </ol>
+  <h3>Gelen dosya</h3>
+  <ul>
+    <li>Android'den gelen dosya <code>.txt</code>, iPhone'dan gelen dosya <code>_chat.txt</code> içeren bir <code>.zip</code> dosyasıdır. Sihirbaz ikisini de kabul eder.</li>
+    <li>Dosyayı açıp düzenlemeyin. Olduğu gibi sihirbaza ekleyin.</li>
+    <li>"Medya olmadan" seçeneği yeterlidir. Fotoğraf ve videolar zaten veritabanına eklenmez, yerlerine bir not eklenir.</li>
+    <li>Dosya bütün yazışmayı düz metin olarak içerir. İş bitince silin.</li>
+  </ul>
+</section>
+
+<section data-id="tr-geri-yukleme" data-title="Yedeği telefona geri yükleme">
+  <h2>Yedeği telefona geri yükleme</h2>
+  <p>Sihirbazın son adımı bu listeyi takip eder. Adımları sırayla yapın.</p>
+  <ol>
+    <li><b>Medya klasörünü yedekleyin.</b> Telefondaki <code>Android/media/com.whatsapp/WhatsApp/Media</code> klasörünü bilgisayara kopyalayın. Uygulamayı kaldırmak bu klasörü siler.</li>
+    <li><b>WhatsApp'ı kaldırın.</b></li>
+    <li><b>Klasörleri oluşturun.</b> Telefonda <code>Android/media</code> klasörüne girin. <code>com.whatsapp</code> klasörü yoksa oluşturun. Onun içinde <code>WhatsApp</code>, onun içinde de <code>Databases</code> klasörünü oluşturun. Tam yol <code>Android/media/com.whatsapp/WhatsApp/Databases</code> olmalıdır.</li>
+    <li><b>Yeni yedeği yerleştirin.</b> Yeni <code>msgstore.db.crypt15</code> dosyasını <code>Databases</code> klasörüne koyun. Adı tam olarak bu olmalıdır. Klasörde başka bir <code>msgstore</code> dosyası olmamalıdır.</li>
+    <li><b>Medyayı geri koyun.</b> Bilgisayara aldığınız <code>Media</code> klasörünü <code>WhatsApp</code> klasörünün içine kopyalayın.</li>
+    <li><b>WhatsApp'ı kurun.</b> Aynı telefon numarasıyla doğrulayın.</li>
+    <li><b>Geri yükleyin.</b> Yedek bulunduğunda <b>Geri yükle</b>'ye dokunun ve 64 basamaklı anahtarı girin.</li>
+    <li><b>Yeni yedek alın.</b> Geri yükleme bitince hemen <b>Ayarlar › Sohbetler › Sohbet yedeği › Yedekle</b>'ye dokunun.</li>
+  </ol>
+  <p>Klasörlere bilgisayardan USB ile ya da telefondaki bir dosya yöneticisi uygulamasıyla ulaşılabilir. Bir sorun çıkarsa orijinal <code>msgstore.db.crypt15</code> dosyasını aynı yolla geri yükleyebilirsiniz.</p>
+</section>
+
+<section data-id="tr-genel" data-title="Genel bakış">
+  <h2>Genel bakış</h2>
+  <div class="pipe" role="img" aria-label="Yedek ve anahtar şifre çözmeye, dışa aktarım okumaya gider. İkisi planlama ve birleştirmede buluşur. Sonuç yeniden şifrelenir ve yeni yedek telefonda geri yüklenir.">
+    <div class="in" style="grid-area:in1"><b>Girdi</b>Yedek (.crypt15) ve 64 basamaklı anahtar</div><i class="r" style="grid-area:a1"></i><div style="grid-area:s1"><b>1</b>Şifre çözme</div><i class="d1" style="grid-area:d1"></i>
+    <div class="in" style="grid-area:in2"><b>Girdi</b>Karşı taraftan dışa aktarım (.txt ya da .zip)</div><i class="r" style="grid-area:a2"></i><div style="grid-area:s2"><b>2</b>Okuma</div><i class="d2" style="grid-area:d2"></i>
+    <div class="tall" style="grid-area:m"><b>3 · 4</b>Planlama (önizleme) ve birleştirme</div><i class="r" style="grid-area:am"></i>
+    <div class="tall" style="grid-area:e"><b>5</b>Yeniden şifreleme ve doğrulama</div><i class="r" style="grid-area:ae"></i>
+    <div class="tall out" style="grid-area:o"><b>Çıktı</b>Yeni yedek, telefonda geri yüklenir</div>
+  </div>
+  <ol>
+    <li><b>Şifre çözme.</b> <code>msgstore.db.crypt15</code> dosyası kullanıcının 64 basamaklı anahtarıyla açılır ve içindeki SQLite veritabanı çıkarılır.</li>
+    <li><b>Okuma.</b> Karşı tarafın gönderdiği dışa aktarım mesajlara ayrılır.</li>
+    <li><b>Planlama.</b> Veritabanındaki sohbetin boşlukları bulunur. Dışa aktarımdaki her mesaj için bir boşluğa düşüp düşmediğine ve yedekte zaten olup olmadığına bakılır. Bu adım hiçbir şey yazmaz ve önizleme olarak gösterilir.</li>
+    <li><b>Birleştirme.</b> Veritabanının bir kopyasına yeni satırlar eklenir ve sohbetin sıralaması yeniden kurulur. Bütün değişiklikler tek bir işlemde yapılır.</li>
+    <li><b>Yeniden şifreleme.</b> Kopya, orijinal yedeğin başlığı kullanılarak aynı anahtarla şifrelenir. Sonuç tekrar açılarak doğrulanır.</li>
+  </ol>
+  <p>warescue Android telefonlardaki uçtan uca şifreli yedeklerle (<code>.crypt15</code>) ve bire bir sohbetlerle çalışır.</p>
+</section>
+
+<section data-id="tr-yedek" data-title="WhatsApp yedekleri">
+  <h2>WhatsApp yedekleri</h2>
+  <h3>Konum ve dosya adı</h3>
+  <p>Android 11 ve sonrasında WhatsApp yerel yedekleri <code>Android/media/com.whatsapp/WhatsApp/Databases/</code> klasöründe arar. Geri yüklenecek dosyanın adı tam olarak <code>msgstore.db.crypt14</code> ya da <code>msgstore.db.crypt15</code> olmalıdır.</p>
+  <p>Aynı klasörde <code>msgstore-YYYY-MM-DD.1.db.crypt14</code> gibi tarihli dosyalar da bulunur. Bunlar önceki günlerin yedekleridir ve WhatsApp onları kendiliğinden geri yüklemez. Eski bir günü geri yüklemek için dosyanın adını <code>msgstore.db.crypt14</code> olarak değiştirmek yeterlidir. Klasörde bu adda başka bir dosya varsa önce onu başka bir yere taşıyın.</p>
+  <h3>crypt14 ve crypt15</h3>
+  <table>
+    <tr><th></th><th>crypt14</th><th>crypt15</th></tr>
+    <tr><th>Ne zaman oluşur</th><td>Varsayılan yerel yedek</td><td>Uçtan uca şifreli yedek açıkken</td></tr>
+    <tr><th>Anahtarın yeri</th><td>Telefonun korumalı alanında (<code>/data/data/com.whatsapp/files/key</code>)</td><td>Kullanıcıda, 64 basamaklı onaltılık bir anahtar olarak</td></tr>
+    <tr><th>Okumak için</th><td>Root erişimi</td><td>Anahtar</td></tr>
+    <tr><th>warescue</th><td class="no">Desteklenmez</td><td class="ok">Okur ve yazar</td></tr>
+  </table>
+  <h3>crypt14 yedekten crypt15 yedeğe geçmek</h3>
+  <p>Elinizde yalnızca crypt14 yedek varsa önce onu WhatsApp'a geri yükleyin. Ardından uçtan uca şifreli yedeği açıp yeni bir yedek alın. Yeni yedek aynı geçmişi crypt15 olarak içerir.</p>
+  <ol>
+    <li>WhatsApp'ta <b>Ayarlar › Sohbetler › Sohbet yedeği › Uçtan uca şifreli yedek</b> bölümüne girin.</li>
+    <li><b>Aç</b>'a dokunun ve parola yerine <b>64 basamaklı şifreleme anahtarı</b> kullanmayı seçin.</li>
+    <li>Gösterilen anahtarı güvenli bir yere kaydedin. Anahtar kaybolursa yedek açılamaz.</li>
+    <li><b>Oluştur</b>'a, ardından <b>Yedekle</b>'ye dokunun.</li>
+  </ol>
+  <p>Adımların ayrıntısı <a href="#tr-anahtar">64 basamaklı anahtarla yedek alma</a> bölümündedir. Bu işlemden sonra yerel yedek <code>msgstore.db.crypt15</code> adıyla oluşur. Parola seçeneği bu iş için uygun değildir. Parola yalnızca asıl anahtarı WhatsApp sunucusundan almaya yarar ve dosya parolayla açılamaz.</p>
+</section>
+
+<section data-id="tr-format" data-title="crypt15 dosya biçimi">
+  <h2>crypt15 dosya biçimi</h2>
+  <div class="layoutbar" aria-hidden="true">
+    <span style="flex:1;background:var(--r-len)">uzunluk</span><span style="flex:1;background:var(--r-flag)">bayrak</span>
+    <span style="flex:4;background:var(--r-proto)">protobuf başlık</span><span style="flex:12;background:var(--r-cipher)">AES-GCM şifreli veri</span>
+    <span style="flex:1.5;background:var(--r-tag)">GCM</span><span style="flex:1.5;background:var(--r-mask)">MD5</span>
+  </div>
+  <div class="layoutscale" aria-hidden="true">
+    <span style="flex:1">1 B</span><span style="flex:1">1 B</span><span style="flex:4">N B</span><span style="flex:12">dosyanın geri kalanı</span><span style="flex:1.5">16 B</span><span style="flex:1.5">16 B</span>
+  </div>
+  <div class="hex" data-hex>
+    <div class="cap"><span>Gerçek yedeğin ilk 64 baytı. Bir bayta ya da etikete dokunun.</span><span class="mono">msgstore.db.crypt15 · yaklaşık 147 MB</span></div>
+    <div data-rows></div>
+    <div class="legend" data-legend></div>
+  </div>
+  <table>
+    <tr><th>Bölüm</th><th>Örnek değer</th><th>Anlamı</th></tr>
+    <tr><td>Bayt 0</td><td><code>0x87</code> = 135</td><td>Protobuf başlığın uzunluğu</td></tr>
+    <tr><td>Bayt 1</td><td><code>0x01</code></td><td>Özellik tablosu bayrağı. Her sürümde bulunmaz. Protobuf başlık <code>0x08</code> ile başladığı için ikisi karışmaz.</td></tr>
+    <tr><td>Alan 1</td><td>1</td><td>Anahtar türü</td></tr>
+    <tr><td>Alan 3.1</td><td>16 bayt</td><td>AES-GCM başlatma vektörü (IV)</td></tr>
+    <tr><td>Alan 4.1</td><td><code>"2.26.38.73"</code></td><td>Yedeği yazan WhatsApp sürümü</td></tr>
+    <tr><td>Alan 4.3</td><td>2 karakter</td><td>Telefon numarasının son iki hanesi</td></tr>
+    <tr><td>Alan 4.4–4.39</td><td>1</td><td>Veritabanı özellik bayrakları</td></tr>
+    <tr><td>Alan 6</td><td>3</td><td>Anlamı bilinmiyor. Yeniden şifrelemede olduğu gibi korunur.</td></tr>
+    <tr><td>Kuyruk</td><td>16 + 16 bayt</td><td>GCM doğrulama etiketi ve önceki her şeyin MD5 özeti</td></tr>
+  </table>
+  <h3>Şemasız protobuf okuma</h3>
+  <p>Başlık bir şema dosyası ya da protobuf kütüphanesi olmadan, doğrudan wire biçiminden okunur (<code>protowire.py</code>). Her alan, <code>alan numarası × 8 + tip</code> değerini taşıyan bir varint ile başlar. Tip 0 ise arkasından bir varint gelir. Tip 2 ise önce uzunluk, sonra o uzunlukta bayt gelir. Bir bayt dizisinin iç içe bir mesaj mı yoksa ham veri mi olduğu biçimden anlaşılmaz. Okuyucu önce onu mesaj olarak çözmeyi dener ve başaramazsa ham veri sayar.</p>
+  <pre>1a 12 0a 10 ab be …
+<span class="c">1a → alan 3, tip 2 (bayt dizisi), 12 → uzunluk 18</span>
+<span class="c">   0a → alan 3.1, tip 2, 10 → uzunluk 16</span>
+<span class="c">      ab be … → IV</span></pre>
+</section>
+
+<section data-id="tr-sifre" data-title="Şifre çözme ve yeniden şifreleme">
+  <h2>Şifre çözme ve yeniden şifreleme</h2>
+  <div class="flow" aria-label="Anahtar zinciri">
+    <span class="in">64 basamaklı anahtar (32 bayt)</span><i>→</i><span>HKDF-SHA256</span><i>→</i><span>AES-256-GCM</span><i>→</i><span>zlib</span><i>→</i><span class="in">SQLite</span>
+  </div>
+  <h3>Anahtar türetme</h3>
+  <p>Kullanıcının anahtarı doğrudan AES anahtarı olarak kullanılmaz. HKDF-SHA256 ile 32 baytlık yeni bir anahtar türetilir. Salt olarak 32 sıfır bayt, bilgi alanı olarak <code>"backup encryption"</code> kullanılır. Çıktı tek bir blok uzunluğunda olduğu için hesap iki HMAC işlemine iner.</p>
+  <pre>prk = HMAC-SHA256(anahtar = 32 × 0x00, veri = kök_anahtar)          <span class="c"># extract</span>
+aes = HMAC-SHA256(anahtar = prk, veri = "backup encryption" ‖ 0x01)  <span class="c"># expand</span></pre>
+  <p>Anahtar WhatsApp'ın gösterdiği biçimde girilebilir. Boşluklar ve tireler dikkate alınmaz. Geriye 64 onaltılık basamak kalmalıdır.</p>
+  <h3>Şifre çözme</h3>
+  <p>IV başlıktaki alan 3.1'den okunur. MD5 kuyruğu doğruysa şifreli gövde olarak veri ve etiket birlikte alınır. Kuyruk doğrulanmazsa kuyruklu ve kuyruksuz iki düzen sırayla denenir. GCM etiketi doğrulanmadan hiçbir çıktı üretilmez. Yanlış anahtar ayrı bir hata olarak bildirilir. Çözülen veri zlib ile açılır ve SQLite veritabanı elde edilir.</p>
+  <h3>Yeniden şifreleme</h3>
+  <ol>
+    <li>Orijinal yedeğin başlığı şablon olarak kullanılır. Sürüm, özellik bayrakları ve numara haneleri değişmez.</li>
+    <li>Girilen anahtarın şablonu açabildiği kontrol edilir.</li>
+    <li>Rastgele yeni bir IV üretilir ve başlıktaki eski IV'nin yerine yazılır. GCM'de aynı anahtarla aynı IV'yi iki kez kullanmak bir güvenlik açığıdır.</li>
+    <li>Veritabanı zlib ile sıkıştırılır ve AES-256-GCM ile şifrelenir. Şablonda MD5 kuyruğu varsa yeniden hesaplanır.</li>
+    <li>Üretilen dosya tekrar açılır ve veritabanıyla bayt bayt karşılaştırılır. Bir fark varsa hiçbir şey yazılmaz.</li>
+  </ol>
+</section>
+
+<section data-id="tr-aktarim" data-title="Sohbet dışa aktarımının okunması">
+  <h2>Sohbet dışa aktarımının okunması</h2>
+  <p>"Sohbeti dışa aktar" dosyası insanların okuması için hazırlanmış bir metindir. İçinde mesaj kimliği ve saniye bilgisi yoktur. Yalnızca dakika, gönderenin adı ve metin bulunur. Her mesaj bir tarih önekiyle başlar. Öneki olmayan satırlar bir önceki mesajın devamıdır.</p>
+  <pre>2.10.2026 13:29 - Kişi: merhaba
+2.10.2026 13:31 - Ben: ilk satır
+ikinci satır: iki nokta da var        <span class="c">← devam satırı</span></pre>
+  <h3>Tanınan önekler</h3>
+  <table>
+    <tr><th>Kaynak</th><th>Örnek</th></tr>
+    <tr><td>Android, noktalı tarih</td><td><code>2.10.2026 13:29 - </code></td></tr>
+    <tr><td>iPhone, saniyeli</td><td><code>[2.10.2026 13:29:05] </code></td></tr>
+    <tr><td>Android, eğik çizgili ve 12 saatlik</td><td><code>10/2/26, 1:29 PM - </code></td></tr>
+  </table>
+  <p>Saatler dışa aktarımı yapan telefonun saat dilimindedir. Veritabanına UTC milisaniye olarak yazılır. iPhone dışa aktarımları <code>_chat.txt</code> içeren bir ZIP dosyası olarak gelir ve metin dosyası arşivden çıkarılır.</p>
+  <h3>Mesaj türleri</h3>
+  <table>
+    <tr><th>Tür</th><th>Nasıl tanınır</th><th>Veritabanına ne yazılır</th></tr>
+    <tr><td>text</td><td>Diğer türlere uymayan her mesaj</td><td>Metnin kendisi</td></tr>
+    <tr><td>media_omitted</td><td>Mesajın tamamı <code>&lt;… omitted&gt;</code> ya da <code>&lt;… dahil edilmedi&gt;</code></td><td><code>📎 Medya (yedekte yok)</code></td></tr>
+    <tr><td>media / contact</td><td><code>dosya.uzantı (dosya ekli)</code>. Uzantı <code>.vcf</code> ise kişi kartıdır.</td><td>Dosya adı ve varsa açıklaması</td></tr>
+    <tr><td>location</td><td><code>konum:</code> ile başlar</td><td>Metnin kendisi</td></tr>
+    <tr><td>poll</td><td><code>ANKET:</code> ile başlar</td><td>Metnin kendisi</td></tr>
+    <tr><td>deleted</td><td>"Bu mesaj silindi" ve İngilizce karşılıkları</td><td><code>🚫 Bu mesaj silindi</code></td></tr>
+    <tr><td>system</td><td>Önekten sonra "Ad: " kalıbı yok</td><td>Eklenmez</td></tr>
+  </table>
+  <h3>Normalleştirme</h3>
+  <ul>
+    <li>WhatsApp adlara ve dosya satırlarına görünmez yön karakterleri (örneğin U+200E) ekler. Bu karakterler ve BOM temizlenir. Dar ve bölünmez boşluklar normal boşluğa çevrilir. Böylece "Ben" adı her yerde aynı biçimde eşleşir.</li>
+    <li>Düzenlenmiş mesajların sonundaki "Bu mesaj düzenlendi" işareti metinden ayrılır.</li>
+    <li>Medya işaretleri yalnızca mesajın tamamını oluşturduklarında tanınır. İçinde <code>&lt;div&gt;</code> gibi etiketler geçen yapıştırılmış metinler medya sanılmaz.</li>
+    <li>Telefonun dili değiştiyse aynı dosyada iki dilde işaret bulunabilir. İkisi de tanınır.</li>
+  </ul>
+  <h3>Gönderenin kim olduğu</h3>
+  <p>Dışa aktarım karşı tarafın telefonunda oluşturulur. Bu yüzden siz, karşı tarafın sizi rehberine kaydettiği adla görünürsünüz. Hangi gönderenin siz olduğunu açıkça seçmeniz gerekir. Sihirbazda bu soru "Hangisi sizsiniz?" olarak sorulur. Komut satırında <code>--me</code> seçeneği kullanılır. Bu seçim <code>from_me</code> alanını belirler.</p>
+</section>
+
+<section data-id="tr-veritabani" data-title="Veritabanı modeli">
+  <h2>Veritabanı modeli</h2>
+  <p>Çözülen veritabanında yüzlerce tablo vardır. Birleştirme için dört tablo yeterlidir.</p>
+  <table>
+    <tr><th>Tablo</th><th>Kullanılan alanlar</th><th>Görevi</th></tr>
+    <tr><td>jid</td><td><code>_id, user, server</code></td><td>Kişi kimliği. Telefon numarası <code>server = 's.whatsapp.net'</code> satırlarında aranır.</td></tr>
+    <tr><td>jid_map</td><td><code>lid_row_id, jid_row_id</code></td><td>Yeni gizli kimliği (LID) telefon kimliğiyle eşler.</td></tr>
+    <tr><td>chat</td><td><code>jid_row_id</code>, son, görünen ve okunan mesaj işaretçileri, <code>sort_timestamp</code></td><td>Sohbet listesi</td></tr>
+    <tr><td>message</td><td>Aşağıdaki tabloda</td><td>Mesajlar</td></tr>
+  </table>
+  <h3>Eklenen mesaj satırları</h3>
+  <table>
+    <tr><th>Alan</th><th>Gelen mesaj</th><th>Giden mesaj</th></tr>
+    <tr><td><code>from_me</code></td><td>0</td><td>1</td></tr>
+    <tr><td><code>key_id</code></td><td colspan="2">Rastgele, 32 basamaklı büyük harfli onaltılık değer</td></tr>
+    <tr><td><code>status</code></td><td>0</td><td>13 (okundu)</td></tr>
+    <tr><td><code>timestamp</code></td><td colspan="2">Hesaplanan zaman (ms, UTC)</td></tr>
+    <tr><td><code>received_timestamp</code></td><td><code>timestamp + 500</code></td><td>0</td></tr>
+    <tr><td><code>receipt_server_timestamp</code></td><td>−1</td><td><code>timestamp</code></td></tr>
+    <tr><td><code>message_type</code></td><td colspan="2">0 (metin)</td></tr>
+    <tr><td><code>sort_id</code></td><td colspan="2">Yeniden sıralama sırasında verilir</td></tr>
+  </table>
+  <h3><code>sort_id</code></h3>
+  <p>Sohbet ekranı mesajları zamana göre değil <code>sort_id</code> değerine göre sıralar. WhatsApp yeni bir mesaja bir sonraki <code>_id</code> değerini verir ve <code>sort_id</code> değerini buna eşitler. Birleştirme algoritması ve onarım aracı bu iki kurala göre tasarlandı.</p>
+</section>
+
+<section data-id="tr-birlestirme" data-title="Birleştirme algoritması">
+  <h2>Birleştirme algoritması</h2>
+  <p>Birleştirme çözülmüş veritabanının bir kopyası üzerinde çalışır. Bütün değişiklikler tek bir işlemde yapılır. Ya hepsi uygulanır ya hiçbiri. Kaynak dosyaya hiçbir zaman yazılmaz.</p>
+  <div class="gaps" aria-label="Boşluk bulma şeması">
+    <div class="g-row"><span>Yedek</span><div class="g-track">
+      <i class="open" style="left:0;width:10%"></i><i class="have" style="left:10%;width:24%"></i>
+      <i class="have" style="left:37%;width:13%"></i><i class="have" style="left:80%;width:10%"></i><i class="open" style="left:90%;width:10%"></i>
+    </div></div>
+    <div class="g-row"><span>Dışa aktarım</span><div class="g-track"><i class="export" style="left:4%;width:96%"></i></div></div>
+    <div class="g-row"><span>Sonuç</span><div class="g-track">
+      <i class="add" style="left:4%;width:6%"></i><i class="have" style="left:10%;width:24%"></i><i class="have" style="left:37%;width:13%"></i>
+      <i class="add" style="left:50%;width:30%"></i><i class="have" style="left:80%;width:10%"></i><i class="add" style="left:90%;width:10%"></i>
+    </div></div>
+    <div class="g-labels"><span style="left:5%">açık baş</span><span style="left:35.5%">30 günden kısa<br>dokunulmaz</span><span style="left:65%">30 gün ve üstü<br>doldurulur</span><span style="left:95%">açık uç</span></div>
+  </div>
+  <div class="key"><span><b class="have"></b>yedekte olan</span><span><b class="add"></b>eklenen</span><span><b class="open"></b>açık baş ve uç</span></div>
+  <ol>
+    <li><b>Sohbeti bulma.</b> Telefon numarasının en az son 7 hanesiyle önce <code>jid</code>, sonra <code>chat</code> bulunur. Tam olarak bir sohbet eşleşmelidir. Aynı kişinin mesaj içeren bir LID sohbeti de varsa işlem durur. Böylece geçmiş iki sohbete bölünmez.</li>
+    <li><b>Boşlukları çıkarma.</b> Sohbetin zaman damgaları sıralanır. İki mesaj arasında 30 gün ya da daha uzun süren her sessizlik bir boşluktur (<code>--min-gap-days</code>). İlk mesajdan önceki açık baş ve son mesajdan sonraki açık uç da boşluk sayılır.</li>
+    <li><b>Mesajı boşluğa atama.</b> Her dışa aktarım mesajının dakikası, ikili arama ile ait olduğu boşluğa yerleştirilir. Hiçbir boşluğa düşmeyen mesaj yedekte zaten vardır ve atlanır. Bir <code>since</code> tarihi verildiyse ondan önceki mesajlara hiç bakılmaz.</li>
+    <li><b>Kenardaki tekrarları ayıklama.</b> Boşluğun iki ucundaki 10 dakikalık pencerede yedekte bulunan mesajlarla karşılaştırma yapılır. Ayrıntısı "Tasarımda gözetilen durumlar" bölümündedir.</li>
+    <li><b>Zaman üretme.</b> Aynı dakikadaki mesajlar o dakikanın saniyelerine eşit aralıklarla dağıtılır. Böylece sıraları korunur.</li>
+    <li><b>Boşluğa sığdırma.</b> İki geçişli bir düzeltme her zaman damgasını boşluğun içine alır ve bir öncekinden büyük olmasını sağlar.</li>
+    <li><b>Ekleme ve yeniden sıralama.</b> Yeni satırlar mevcut sıraya zamanlarına göre yerleştirilir. İlk yeni satırdan sonraki bütün satırlar, tablodaki en büyük değerin üstünden başlayan yeni <code>sort_id</code> değerleri alır.</li>
+    <li><b>İşaretçiler ve sayaç.</b> Sohbetin son, görünen ve okunan mesaj işaretçileri güncellenir. <code>sqlite_sequence</code> içindeki <code>message</code> sayacı en büyük <code>sort_id</code> değerine çekilir.</li>
+    <li><b>Doğrulama.</b> <code>PRAGMA quick_check</code> çalıştırılır. Bir hata çıkarsa yarım kalan çıktı dosyası silinir.</li>
+  </ol>
+  <h3>İki geçişli sığdırma</h3>
+  <p>Dakikaya dağıtılan saniyeler boşluğun dışına taşabilir. Örneğin boşluk 14:05:10'da bitiyor ama aynı dakikadaki üç mesaj 14:05:00, 14:05:20 ve 14:05:40'a dağıtılmış olabilir. Bu zamanlar sıra bozulmadan düzeltilir.</p>
+  <pre>alt, üst = boşluk.başlangıç + 1, boşluk.bitiş − 1
+<span class="c"># ileri geçiş: başlangıcın ve bir öncekinin üstüne it</span>
+önceki = alt − 1
+her satır için:        satır.zaman = önceki = max(satır.zaman, önceki + 1)
+<span class="c"># geri geçiş: bitişin ve bir sonrakinin altına çek</span>
+sonraki = üst + 1
+her satır için (ters): satır.zaman = sonraki = min(satır.zaman, sonraki − 1)</pre>
+  <p>Boşlukta mesaj sayısı kadar milisaniye yoksa işlem hata verir ve hiçbir şey yazılmaz.</p>
+  <h3>Yeniden sıralama ve birden fazla sohbet</h3>
+  <p>Mevcut satırlar <code>sort_id</code> sırasıyla, yeni satırlar zaman sırasıyla iki işaretçili bir birleştirmeyle tek bir sıraya dizilir. İlk yeni satırdan sonraki satırlar yeniden numaralanır. Öncesine dokunulmaz ve mevcut mesajların kendi aralarındaki sırası değişmez. Birden fazla dışa aktarım varsa sırayla işlenir ve her biri bir öncekinin çıktısını okur. Aynı sohbete ait iki dışa aktarım kabul edilmez.</p>
+</section>
+
+<section data-id="tr-siralama" data-title="Sıralama ve onarım">
+  <h2>Sıralama ve onarım</h2>
+  <p>Eklenen satırların <code>sort_id</code> değerleri tablodaki en büyük <code>_id</code> değerini aşar. Sayaç ilerletilmezse WhatsApp'ın geri yüklemeden sonra oluşturduğu mesaj daha küçük bir numara alır ve sohbetin ortasına düşer. Mesaj sohbet listesinde görünür ama sohbetin içinde en altta görünmez.</p>
+  <div class="sorts">
+    <div>
+      <h4 class="no">Sayaç ilerletilmeden</h4>
+      <ol>
+        <li><span class="s">1</span>eski mesaj</li><li><span class="s">2</span>eski mesaj</li>
+        <li class="new bad"><span class="s">3</span>yeni mesaj (ortada kalır)</li>
+        <li class="add"><span class="s">101</span>eklenen mesaj</li><li class="add"><span class="s">102</span>eklenen mesaj</li><li class="add"><span class="s">103</span>eklenen mesaj</li>
+      </ol>
+    </div>
+    <div>
+      <h4 class="ok">Sayaç en büyük <code>sort_id</code> değerine çekildikten sonra</h4>
+      <ol>
+        <li><span class="s">1</span>eski mesaj</li><li><span class="s">2</span>eski mesaj</li>
+        <li class="add"><span class="s">101</span>eklenen mesaj</li><li class="add"><span class="s">102</span>eklenen mesaj</li><li class="add"><span class="s">103</span>eklenen mesaj</li>
+        <li class="new"><span class="s">104</span>yeni mesaj (en altta)</li>
+      </ol>
+    </div>
+  </div>
+  <p>Bu yüzden birleştirme her çalışmanın sonunda sayacı en büyük <code>sort_id</code> değerine çeker. <code>repair</code> komutu bu düzeltmeden önce oluşturulmuş yedekler içindir.</p>
+  <ol>
+    <li><b>Referansı doğrulama.</b> Telefona geri yüklenen birleştirilmiş veritabanı referans alınır. Referansın son beş satırından en az üçü güncel yedekte aynı <code>_id</code> ve <code>key_id</code> ile bulunmalıdır. Bulunmazsa işlem durur.</li>
+    <li><b>Yeni satırları belirleme.</b> Referanstaki en büyük <code>_id</code> değerinden sonra gelen satırlar geri yüklemeden sonra yazılmıştır.</li>
+    <li><b>Taşıma.</b> Bu satırlar sohbetin ortasında kalmışsa ya da eski bir satırla aynı <code>sort_id</code> değerini almışsa sohbetin sonuna, zaman sırasıyla taşınır.</li>
+    <li><b>Sayaç.</b> Sayaç en büyük <code>sort_id</code> değerine çekilir. Bundan sonraki mesajlar kendiliğinden en alta düşer.</li>
+  </ol>
+</section>
+
+<section data-id="tr-kararlar" data-title="Tasarımda gözetilen durumlar">
+  <h2>Tasarımda gözetilen durumlar</h2>
+  <h3>Boşluk eşiği olarak 30 gün</h3>
+  <p>Daha kısa bir eşikle, zaten yedeklenmiş geçmişin içinde çok sayıda küçük boşluk ortaya çıkar. Bunlar gerçek bir kayıptan kaynaklanmaz. Medya mesajlarının yedekte metni yoktur ama dışa aktarımda yer tutucusu vardır, bu yüzden metinler eşleşmez. Kullanıcının "benden sil" ile sildiği mesajlar da karşı tarafın dosyasında durmaya devam eder. 30 günlük eşik yalnızca gerçek kopuklukları doldurur. <code>since</code> tarihi ise belirli bir günden öncesine hiç dokunulmamasını sağlar.</p>
+  <h3>Açık baş ve açık uç</h3>
+  <p>Geri yüklemeden sonra bir kişiyle hiç yazışılmadıysa eksik dönem iki mesajın arasında değil sohbetin sonundadır. Hiç yedek yoksa geçmişin tamamı sohbetin başındadır. Bu yüzden sohbetin başı ve sonu da birer boşluk olarak ele alınır.</p>
+  <h3>Kenarlarda eşleştirme</h3>
+  <p>Boşluğun iki ucundaki 10 dakikalık pencerede iki küme oluşturulur. İlki metinli mesajların <code>(from_me, metin)</code> ikilileridir. İkincisi fotoğraf, çıkartma ve sistem satırı gibi metinsiz satırların <code>(from_me, dakika)</code> ikilileridir.</p>
+  <table>
+    <tr><th>Dışa aktarımdaki mesaj</th><th>Yedekte, boşluğun kenarında</th><th>Karar</th></tr>
+    <tr><td>14:02 Ben: tamam</td><td>14:02:37 Ben: tamam</td><td class="no">Aynı metin, eklenmez</td></tr>
+    <tr><td>14:05 Kişi: &lt;Medya dahil edilmedi&gt;</td><td>14:05:10 Kişi: fotoğraf, metin yok</td><td class="no">Aynı dakikada metinsiz satır var, eklenmez</td></tr>
+    <tr><td>14:20 Kişi: görüşürüz</td><td>Yok</td><td class="ok">Karşılığı yok, eklenir</td></tr>
+  </table>
+  <h3>İki boşluğun kesiştiği dakika</h3>
+  <p>Bir boşluk 14:05:10'daki bir mesajla bitip sonraki boşluk aynı mesajla başlayabilir. Bu durumda 14:05 dakikasındaki dışa aktarım mesajlarının hangi boşluğa ait olduğu saatten anlaşılmaz. Karar sınırdaki mesaja göre verilir. O mesaj dışa aktarımda görülene kadar önceki boşluk, görüldükten sonra sonraki boşluk geçerlidir.</p>
+  <h3>Kaynağın korunması</h3>
+  <p>Girdi veritabanı hiçbir zaman değiştirilmez. Her yazma bir kopya üzerinde ve tek bir işlemde yapılır. İşlem <code>PRAGMA quick_check</code> ile biter ve hata çıkarsa yarım dosya silinir. Yeniden şifrelenen dosya da yazılmadan önce tekrar açılarak doğrulanır.</p>
+  <h3>Telefon tarafı</h3>
+  <ul>
+    <li>Uygulamayı kaldırmak <code>Android/media/com.whatsapp</code> klasörünü siler. Yerel yedekler ve medya bu klasördedir. Kaldırmadan önce klasörü bilgisayara kopyalayın.</li>
+    <li>Geri yükleme yalnızca doğru klasördeki <code>msgstore.db.crypt15</code> adlı dosyadan yapılır. Uygulama yeniden kurulmadan önce <code>Android/media/com.whatsapp/WhatsApp/Databases</code> klasörleri oluşturulmalı ve dosya içine konmalıdır. Adımlar <a href="#tr-geri-yukleme">yedeği telefona geri yükleme</a> bölümündedir.</li>
+    <li>Yedeğin başlığında numaranın son iki hanesi bulunur. Yedek başka bir numarayla geri yüklenemez.</li>
+    <li>Geri yükleme ekranında "Atla" seçilirse aynı kurulumda bir daha sorulmaz. Uygulamayı yeniden kurmak gerekir.</li>
+    <li>Kurtarma bitene kadar yeni yedek almayın. Yoksa boş sohbetlerin yedeği elinizdeki yedeğin üzerine yazılabilir.</li>
+    <li>Geri yükleme bittikten sonra hemen yeni bir yedek alın.</li>
+  </ul>
+</section>
+
+<section data-id="tr-sihirbaz" data-title="Sihirbazla kullanım">
+  <h2>Sihirbazla kullanım</h2>
+  <p><code>warescue ui</code> komutu tarayıcıda altı adımlı bir sihirbaz açar. Uzun işlemler arka planda çalışır. Sayfa yenilense de kalınan adımdan devam edilir.</p>
+  <table>
+    <tr><th>Adım</th><th>Ne yapılır</th><th>Hazır olması gereken</th></tr>
+    <tr><td>1. Yedek</td><td>Yedek dosyası seçilir. Dosya biçimi ve sağlama toplamı kontrol edilir.</td><td><code>msgstore.db.crypt15</code></td></tr>
+    <tr><td>2. Anahtar</td><td>Yedek bir kopya üzerinde açılır. Mesaj ve sohbet sayısı gösterilir.</td><td>64 basamaklı anahtar</td></tr>
+    <tr><td>3. Sohbetler</td><td>Dışa aktarımlar eklenir. Sizin adınız ve karşı tarafın numarası girilir.</td><td>Dışa aktarım dosyaları</td></tr>
+    <tr><td>4. Önizleme</td><td>Her sohbet için eklenecek ve atlanacak mesajlar aylık bir grafikle gösterilir. Henüz hiçbir şey yazılmaz.</td><td>Yok</td></tr>
+    <tr><td>5. Yeni yedek</td><td>Birleştirme ve şifreleme yapılır. Sonuç doğrulanır ve kaydedilir.</td><td>Yok</td></tr>
+    <tr><td>6. Telefona yükleme</td><td>Telefonda yapılacaklar bir kontrol listesiyle takip edilir. Sonunda şifresiz dosyalar silinir.</td><td>USB kablo veya internetten güvenli aktarım yolu</td></tr>
+  </table>
+</section>
+
+<section data-id="tr-komutlar" data-title="Komut başvurusu">
+  <h2>Komut başvurusu</h2>
+  <table>
+    <tr><th>Komut</th><th>Ne yapar</th><th>Önemli seçenekler</th></tr>
+    <tr><td><code>inspect</code></td><td>Dosya düzenini, onaltılık dökümü ve başlık ağacını gösterir. Anahtar istemez.</td><td></td></tr>
+    <tr><td><code>decrypt</code></td><td>crypt15 dosyasını SQLite veritabanına çevirir ve tablo ve mesaj sayılarını yazar.</td><td><code>--force</code></td></tr>
+    <tr><td><code>parse</code></td><td>Dışa aktarımı özetler. Gönderenleri, mesaj türlerini ve tarih aralığını gösterir.</td><td><code>--me</code>, <code>--tz</code></td></tr>
+    <tr><td><code>merge</code></td><td>Boşlukları dışa aktarımdan doldurur ve yeni bir kopya oluşturur.</td><td><code>--phone</code>, <code>--me</code>, <code>--out</code>, <code>--dry-run</code>, <code>--since</code>, <code>--min-gap-days</code>, <code>--skip-media</code>, <code>--tz</code></td></tr>
+    <tr><td><code>encrypt</code></td><td>SQLite veritabanını orijinal yedeği şablon alarak crypt15'e çevirir ve sonucu tekrar açarak doğrular.</td><td><code>--force</code></td></tr>
+    <tr><td><code>repair</code></td><td>Geri yüklemeden sonra sohbetin ortasına düşen mesajları sona taşır ve sayacı düzeltir.</td><td><code>--baseline</code>, <code>--out</code>, <code>--dry-run</code></td></tr>
+    <tr><td><code>ui</code></td><td>Sihirbazı açar.</td><td><code>--port</code>, <code>--workspace</code>, <code>--no-browser</code></td></tr>
+  </table>
+  <h3>Tam akış</h3>
+  <pre>warescue inspect private/msgstore.db.crypt15
+warescue decrypt private/msgstore.db.crypt15 private/msgstore.db
+warescue parse   private/chats/kisi/_chat.txt
+warescue merge   private/msgstore.db private/chats/kisi/_chat.txt \
+                 --phone 5XXXXXXXXX --me "Ad" --since 2024-10-01 --dry-run
+warescue merge   … --out private/merged.db
+warescue encrypt private/merged.db private/msgstore.db.crypt15 private/out/msgstore.db.crypt15</pre>
+  <p>Anahtar hiçbir komuta argüman olarak verilmez. <code>WA_BACKUP_KEY</code> ortam değişkeninden ya da gizli bir istemden okunur.</p>
+  <h3><code>merge</code> seçenekleri</h3>
+  <table>
+    <tr><th>Seçenek</th><th>Anlamı</th></tr>
+    <tr><td><code>--phone</code></td><td>Karşı tarafın numarası. En az son 7 hane yeterlidir.</td></tr>
+    <tr><td><code>--me</code></td><td>Dışa aktarımda sizin göründüğünüz ad, harfi harfine</td></tr>
+    <tr><td><code>--since YYYY-MM-DD</code></td><td>Bu tarihten önceki dışa aktarım mesajlarına bakılmaz.</td></tr>
+    <tr><td><code>--min-gap-days N</code></td><td>N günden kısa sessizlikler boşluk sayılmaz. Varsayılan değer 30'dur.</td></tr>
+    <tr><td><code>--skip-media</code></td><td>Medya yer tutucuları eklenmez.</td></tr>
+    <tr><td><code>--tz</code></td><td>Dışa aktarımı yapan telefonun saat dilimi. Varsayılan değer <code>Europe/Istanbul</code>'dur.</td></tr>
+  </table>
+  <h3>Sık görülen hata mesajları</h3>
+  <table>
+    <tr><th>Mesaj</th><th>Anlamı</th></tr>
+    <tr><td><code>authentication failed</code></td><td>Anahtar yanlış ya da dosya crypt14.</td></tr>
+    <tr><td><code>expected exactly one chat</code></td><td><code>--phone</code> için daha fazla hane girin. Numaranın bire bir bir sohbete ait olduğunu kontrol edin.</td></tr>
+    <tr><td><code>--me … is not a sender</code></td><td>Adı <code>parse</code> çıktısından, varsa emojisiyle birlikte aynen kopyalayın.</td></tr>
+    <tr><td><code>contact also has a LID chat</code></td><td>Kişinin ikinci bir sohbeti var. Bu durum henüz desteklenmiyor.</td></tr>
+    <tr><td><code>export has more than two senders</code></td><td>Bu bir grup sohbeti ve desteklenmiyor.</td></tr>
+    <tr><td><code>row ids differ</code> (repair)</td><td>Referans, telefonun geri yüklendiği veritabanı değil.</td></tr>
+  </table>
+</section>
+
+<section data-id="tr-guvenlik" data-title="Güvenlik ve gizlilik">
+  <h2>Güvenlik ve gizlilik</h2>
+  <ul>
+    <li><b>Amaç.</b> warescue bir kırma aracı değildir. Yalnızca kullanıcının kendi yedeğini, kendi seçtiği anahtarla açar.</li>
+    <li><b>Ağ.</b> Çalışırken hiçbir ağ isteği yapılmaz. Sihirbaz yalnızca <code>127.0.0.1</code> adresinde ve rastgele bir portta çalışır. Sayfalar dışarıdan hiçbir şey yüklemez.</li>
+    <li><b>Oturum.</b> Her API isteği oturum anahtarını taşımak zorundadır. Bu anahtar adres çubuğundaki <code>#t=…</code> parçasından okunur. Başka sitelerden gelen istekler <code>Host</code>, <code>Origin</code> ve fetch meta verisi kontrolleriyle reddedilir.</li>
+    <li><b>Yedek anahtarı.</b> Diske yazılmaz, kayıtlara geçmez ve komut satırında argüman olarak alınmaz. Sihirbazda yalnızca bellekte tutulur. Oturum kapanınca ya da şifresiz dosyalar silinince sıfırlanır.</li>
+    <li><b>Şifresiz dosyalar.</b> Çözülmüş veritabanı ve dışa aktarımlar bütün yazışmaların düz metin halidir. İş bitince silinmelidir. Şifreli <code>.crypt15</code> dosyaları saklanabilir.</li>
+    <li><b>Depo.</b> <code>.gitignore</code> kişisel veri içerebilecek dosyaları (<code>private/</code>, <code>*.crypt1*</code>, <code>*.db</code>, <code>*.key</code>, <code>_chat*.txt</code>) depodan uzak tutar. Testler yalnızca sentetik veri kullanır.</li>
+    <li><b>Kullanım koşulları.</b> Yedeği elle değiştirmek WhatsApp'ın desteklediği bir işlem değildir. Sonuç doğrulanana kadar orijinal dosyaları saklayın.</li>
+    <li><b>Kaynak.</b> Dosya biçimine dair bilgiler bu proje kapsamında, yedekler incelenerek çıkarıldı. warescue başka bir projenin kodunu kullanmaz.</li>
+  </ul>
+</section>
+
+<section data-id="tr-gelistirme" data-title="Geliştirmeye açık alanlar">
+  <h2>Geliştirmeye açık alanlar</h2>
+  <table>
+    <tr><th>Konu</th><th>Bugünkü durum</th><th>Olası çözüm</th></tr>
+    <tr><td>Arama dizini</td><td>Eklenen mesajlar WhatsApp aramasında çıkmayabilir.</td><td><code>message_ftsv2</code> tablosunun doldurulması</td></tr>
+    <tr><td>Medya dosyaları</td><td>Fotoğraf ve videolar yer tutucu metin olarak görünür.</td><td>Medyalı dışa aktarımın ve <code>message_media</code> tablosunun kullanılması</td></tr>
+    <tr><td>Yanıt ve alıntılar</td><td>Dışa aktarımda bu bilgi yoktur.</td><td>Şimdilik yok</td></tr>
+    <tr><td>Saniye bilgisi</td><td>Saatler dakika içinde tahminidir.</td><td>Şimdilik yok</td></tr>
+    <tr><td>Grup sohbetleri</td><td>Desteklenmiyor.</td><td>Her gönderen için <code>sender_jid_row_id</code> eşlemesi</td></tr>
+    <tr><td>Mesaj içeren LID sohbeti</td><td>Güvenlik için işlem durur.</td><td>İki sohbeti birleştiren bir yöntem</td></tr>
+    <tr><td>"Benden sil" ayrımı</td><td>Uzun boşluklarda silinmiş mesajlar geri gelebilir.</td><td>Şimdilik <code>since</code> ile sınırlanıyor</td></tr>
+    <tr><td>Sihirbazda boşluk eşiği</td><td>Yalnızca komut satırında değiştirilebiliyor.</td><td>Önizleme adımına bir ayar eklenmesi</td></tr>
+  </table>
+  <h3>Katkıda bulunmak isteyenler için</h3>
+  <ul>
+    <li>Bir sorun ya da öneri için depoda bir konu (issue) açın. Ne yaptığınızı, ne beklediğinizi ve ne gördüğünüzü yazın.</li>
+    <li>Kod katkıları pull request ile gönderilir.</li>
+    <li>Her değişiklik için test yazılmalıdır. Yeni bir davranış ya da düzeltilen bir hata, onu gösteren bir testle birlikte gelir. Gönderimden önce <code>pytest -q</code> temiz geçmelidir.</li>
+    <li>Testler yalnızca sentetik veri kullanır. Gerçek bir yedeği, dışa aktarımı ya da anahtarı hiçbir zaman paylaşmayın. Bir hatayı göstermek gerekirse durumu sentetik bir örnekle yeniden oluşturun.</li>
+    <li>Yeni bir dışa aktarım biçimi ya da dil desteği eklemek için en kolay başlangıç noktası <code>chatexport.py</code> ve testleridir.</li>
+  </ul>
+</section>
+
+<section data-id="tr-yapi" data-title="Proje yapısı ve testler">
+  <h2>Proje yapısı ve testler</h2>
+  <pre>src/warescue/
+├── protowire.py    <span class="c"># şemasız protobuf okuyucu ve yazıcı</span>
+├── crypt15.py      <span class="c"># dosya düzeni, HKDF, AES-GCM, zlib, yeniden şifreleme</span>
+├── chatexport.py   <span class="c"># dışa aktarım okuyucu</span>
+├── merge.py        <span class="c"># boşluk bulma, eşleştirme, ekleme, sıralama</span>
+├── repair.py       <span class="c"># geri yükleme sonrası sıralama onarımı</span>
+├── service.py      <span class="c"># komut satırı ve sihirbazın ortak işlemleri</span>
+├── cli.py          <span class="c"># komut satırı</span>
+└── ui/             <span class="c"># sihirbaz: yerel sunucu, uç noktalar, iş kuyruğu, sayfalar</span>
+tests/              <span class="c"># yalnızca sentetik veri</span></pre>
+  <p>Testler şu konuları kapsar.</p>
+  <ul>
+    <li>Varint ve protobuf okuma, elle yazılan HKDF'nin kütüphaneyle aynı sonucu vermesi</li>
+    <li>Bayrak baytı ve MD5 kuyruğunun dört farklı birleşimi, yanlış anahtar, her şifrelemede yeni IV</li>
+    <li>Dışa aktarım biçimleri, görünmez karakterler ve iki dilli işaretler</li>
+    <li>Boşluk doldurma, kenardaki tekrarlar, açık baş ve uç, hiç yedeği olmayan kurulum, kesişen dakika ve <code>since</code></li>
+    <li>Kaynağın değişmemesi, işaretçilerin tutarlılığı, benzersiz <code>sort_id</code> ve onarım</li>
+    <li>Sihirbazın oturum güvenliği, uç noktaları ve anahtarın hiçbir yanıtta ya da dosyada geçmemesi</li>
+  </ul>
+  <p class="dim">Örneklerdeki ad ve numaralar gerçek değildir.</p>
+</section>
+
+  </main>
+</div>
+
+<div class="doc" data-lang="en" lang="en" hidden>
+  <nav class="toc" aria-label="Contents">
+    <p>Contents</p>
+    <ol></ol>
+  </nav>
+  <main>
+
+<section data-id="en-incident" data-title="The incident behind this project">
+  <p class="meta">warescue 0.3.0 · technical description</p>
+  <h2>The incident behind this project</h2>
+  <p>This project was built after a real loss of data. After the phone's language setting was changed, the WhatsApp chat history could no longer be opened. The app was reinstalled, but the restore step did not work and every chat was deleted. There was no Google Drive backup. The daily backups on the phone had been deleted together with the app.</p>
+  <ol class="story">
+    <li class="bad"><b>Language change.</b> The chat history could not be opened and the app was reinstalled.</li>
+    <li><b>An old backup turned up.</b> A local backup from October 2024 had been copied by hand earlier.</li>
+    <li class="good"><b>History came back up to October 2024.</b> WhatsApp recognised the backup once the file was moved to the right folder and renamed.</li>
+    <li><b>The later period was missing.</b> Everything after October 2024 existed only on the other people's phones. The chats to be recovered were requested from them with "Export chat".</li>
+    <li><b>A readable backup was made.</b> The end-to-end encrypted backup was turned on with a 64-digit key and the backup switched to the crypt15 format.</li>
+    <li class="good"><b>The missing periods were added.</b> warescue placed the messages from the exports into the backup, and the backup was restored to the phone.</li>
+  </ol>
+  <h3>Result</h3>
+  <p>About <b>170,000</b> messages were added to three chats and all of them became readable inside WhatsApp on the phone. None of the more than 950,000 messages already in the backup changed.</p>
+  <div class="chart" data-chart="outcome"></div>
+  <div class="key"><span><b class="have"></b>already in the 2024 backup</span><span><b class="add"></b>added from the export</span><span>Bars are approximate.</span></div>
+  <h3>Example situations</h3>
+  <p>The three chats were in different situations. Each one shows a different side of the algorithm.</p>
+  <table>
+    <tr><th>Chat</th><th>Situation</th><th>How it was filled</th></tr>
+    <tr><td>Contact 1</td><td>The backup held history from 2019 to October 2024. There had been new messages after the restore.</td><td>The two years in between went into the gap between two messages.</td></tr>
+    <tr><td>Contact 2</td><td>The chat on the other phone only started in mid-2025.</td><td>The period in the export was added. August 2024 to June 2025 was on neither phone and stayed empty.</td></tr>
+    <tr><td>Contact 3</td><td>The backup also had a break between 2019 and 2020. Nobody had written after the restore.</td><td>Both gaps were filled. One lay between two messages, the other was the open tail at the end of the chat.</td></tr>
+  </table>
+</section>
+
+<section data-id="en-when" data-title="When to use it">
+  <h2>When to use it</h2>
+  <p>warescue helps when your conversation with someone is missing on your phone but still there on theirs. Messages are added only to the chat you choose. Your other chats and your existing messages are not touched.</p>
+  <div class="cards">
+    <div class="card"><h3>You deleted a chat on your side</h3><p>You deleted the chat with one person from your own phone and now want it back. All your other chats are still in place. Only that chat comes back, from the other person's export.</p></div>
+    <div class="card"><h3>You cleared a chat</h3><p>You used "Clear chat" on a conversation. The chat is still in the list but empty. The whole history is added back from the export.</p></div>
+    <div class="card"><h3>The restore was skipped</h3><p>While reinstalling, "Skip" was tapped instead of "Restore" and every chat came back empty.</p></div>
+    <div class="card"><h3>Your backup is old</h3><p>A backup brought history back up to a certain date. Everything after that is gone.</p></div>
+    <div class="card"><h3>You changed phones</h3><p>The old phone broke or was lost, or the backup could not be moved. The new phone has no history but the other person still has it.</p></div>
+    <div class="card"><h3>The chat history broke</h3><p>After an update or a settings change the history would not open and the app was reset.</p></div>
+    <div class="card"><h3>A period is missing</h3><p>A chat has a break of several months. For example, another phone was used for a while and that period was never backed up.</p></div>
+    <div class="card"><h3>The app was uninstalled</h3><p>Uninstalling WhatsApp also deleted the local backups on the phone, and there was no Google Drive backup either.</p></div>
+  </div>
+  <h3>Good to know</h3>
+  <ul>
+    <li>If the chat does not appear in the list at all, exchange one message with that person first and then take a backup. Case B in "Which situation am I in?" covers this.</li>
+    <li>Individual messages deleted from inside a chat are not added back by default if they fall within a period shorter than 30 days. If you lower this threshold with <code>--min-gap-days</code> on the command line, you can recover messages from shorter periods too.</li>
+    <li>If the other person has deleted the chat too, there is nothing left to restore from.</li>
+  </ul>
+</section>
+
+<section data-id="en-situation" data-title="Which situation am I in?">
+  <h2>Which situation am I in?</h2>
+  <p>warescue does not need an old backup. Two things are enough. One is any end-to-end encrypted backup taken from your phone. The other is the export of the chat from the other person's phone. The missing messages come from the export. The backup is only the container they are placed into.</p>
+  <div class="cards">
+    <div class="card">
+      <h3>A. I have an old backup</h3>
+      <p class="dim">History came back up to some date and nothing after it.</p>
+      <ol>
+        <li>Restore the old backup. The "WhatsApp backups" section explains where the file goes and what it must be called.</li>
+        <li><a href="#en-key">Take an end-to-end encrypted backup with a 64-digit key.</a></li>
+        <li>Ask the other person for an <a href="#en-export-how">export</a> and use the wizard. The missing period goes between two messages or to the end of the chat.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>B. I have no backup at all</h3>
+      <p class="dim">WhatsApp was installed from scratch and every chat is empty.</p>
+      <ol>
+        <li>Send a message to each person whose chat you want back, or receive one from them. This puts the chat into the backup.</li>
+        <li><a href="#en-key">Take an end-to-end encrypted backup with a 64-digit key.</a></li>
+        <li>Ask the other person for an <a href="#en-export-how">export</a> and use the wizard. The whole history goes before your new message.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>C. My backup is current but some periods are missing</h3>
+      <p class="dim">A chat has a break of several months.</p>
+      <ol>
+        <li><a href="#en-key">Take an end-to-end encrypted backup with a 64-digit key.</a></li>
+        <li>Add the <a href="#en-export-how">export</a>. Every break longer than 30 days is filled. The preview shows which periods.</li>
+      </ol>
+    </div>
+  </div>
+  <h3>What you need</h3>
+  <ul>
+    <li>An Android phone and a computer running Windows, macOS or Linux</li>
+    <li>A way to move the file between the phone and the computer, such as a USB cable or sending the backup over the internet</li>
+    <li>Python 3.10 or newer and warescue installed on the computer (see the README)</li>
+    <li>For each chat, the <a href="#en-export-how">export file</a> the other person sent with "Without media"</li>
+    <li>The <a href="#en-key">64-digit key</a> you chose when making the backup</li>
+  </ul>
+  <h3>When warescue cannot help</h3>
+  <ul>
+    <li>If the other person deleted the chat too, or never had it, there is nothing to restore from.</li>
+    <li>Group chats are not supported yet.</li>
+    <li>If your own phone is an iPhone, the backup cannot be read. The other person using an iPhone is fine.</li>
+    <li>Photos, videos and voice notes are not in the export. A short note is added in their place.</li>
+  </ul>
+</section>
+
+<section data-id="en-key" data-title="Backing up with a 64-digit key">
+  <h2>Backing up with a 64-digit key</h2>
+  <p>warescue can only open end-to-end encrypted backups made with a 64-digit key. You set this up once. Every later backup is encrypted with the same key.</p>
+  <ol>
+    <li>Open WhatsApp and go to <b>Settings › Chats › Chat backup</b>.</li>
+    <li>Tap <b>End-to-end encrypted backup</b> and choose <b>Turn on</b>.</li>
+    <li>On the password screen, tap <b>Use 64-digit encryption key instead</b>.</li>
+    <li>The 64-digit key appears on the screen. Write it down in a password manager or on paper. Do not keep it as a screenshot on the phone.</li>
+    <li>Confirm that you saved the key and tap <b>Create</b>.</li>
+    <li>Go back to the chat backup screen and tap <b>Back up</b>. Wait for the backup to finish.</li>
+    <li>Connect the phone to the computer and copy <code>Android/media/com.whatsapp/WhatsApp/Databases/msgstore.db.crypt15</code> to the computer.</li>
+  </ol>
+  <div class="box">
+    <p>If the key is lost, the backup cannot be opened at all. WhatsApp cannot recover the key either.</p>
+    <p>The key encrypts the Google Drive backups as well as the local ones on this phone.</p>
+  </div>
+  <p>In the wizard the key can be typed with or without spaces. It is never written to disk and stays in memory only while the session is open.</p>
+</section>
+
+<section data-id="en-export-how" data-title="Exporting a chat">
+  <h2>Exporting a chat</h2>
+  <p>The missing messages come from the chat on the other person's phone. They follow these steps on their own phone. You can send them the text below as it is.</p>
+  <h3>Android</h3>
+  <ol>
+    <li>Open your chat in WhatsApp.</li>
+    <li>Tap the <b>⋮</b> menu at the top right, then <b>More › Export chat</b>.</li>
+    <li>Choose <b>Without media</b>.</li>
+    <li>Send the file by email, Google Drive or as a document in WhatsApp.</li>
+  </ol>
+  <h3>iPhone</h3>
+  <ol>
+    <li>Open your chat in WhatsApp.</li>
+    <li>Tap the contact's name at the top of the screen.</li>
+    <li>Tap <b>Export Chat</b> near the bottom and choose <b>Without Media</b>.</li>
+    <li>Send the ZIP file by email, iCloud Drive or as a document in WhatsApp.</li>
+  </ol>
+  <h3>The file you receive</h3>
+  <ul>
+    <li>A file from Android is a <code>.txt</code>. A file from an iPhone is a <code>.zip</code> containing <code>_chat.txt</code>. The wizard accepts both.</li>
+    <li>Do not open and edit the file. Add it to the wizard as it is.</li>
+    <li>"Without media" is enough. Photos and videos are not added to the database anyway, and a note takes their place.</li>
+    <li>The file holds the whole conversation as plain text. Delete it when you are done.</li>
+  </ul>
+</section>
+
+<section data-id="en-restore" data-title="Restoring the backup on the phone">
+  <h2>Restoring the backup on the phone</h2>
+  <p>The last step of the wizard follows this list. Do the steps in order.</p>
+  <ol>
+    <li><b>Back up the media folder.</b> Copy <code>Android/media/com.whatsapp/WhatsApp/Media</code> from the phone to the computer. Uninstalling the app deletes this folder.</li>
+    <li><b>Uninstall WhatsApp.</b></li>
+    <li><b>Create the folders.</b> On the phone, open <code>Android/media</code>. Create a <code>com.whatsapp</code> folder if there is none. Inside it create <code>WhatsApp</code>, and inside that create <code>Databases</code>. The full path must be <code>Android/media/com.whatsapp/WhatsApp/Databases</code>.</li>
+    <li><b>Put the new backup in place.</b> Copy the new <code>msgstore.db.crypt15</code> into the <code>Databases</code> folder. The name must be exactly this. There must be no other <code>msgstore</code> file in the folder.</li>
+    <li><b>Put the media back.</b> Copy the <code>Media</code> folder you saved into the <code>WhatsApp</code> folder.</li>
+    <li><b>Install WhatsApp.</b> Verify the same phone number.</li>
+    <li><b>Restore.</b> When the backup is found, tap <b>Restore</b> and enter the 64-digit key.</li>
+    <li><b>Take a new backup.</b> As soon as the restore finishes, tap <b>Settings › Chats › Chat backup › Back up</b>.</li>
+  </ol>
+  <p>The folders can be reached from a computer over USB or with a file manager app on the phone. If something goes wrong, you can restore the original <code>msgstore.db.crypt15</code> the same way.</p>
+</section>
+
+<section data-id="en-overview" data-title="Overview">
+  <h2>Overview</h2>
+  <div class="pipe" role="img" aria-label="The backup and key go to decryption, the export goes to reading. Both meet in planning and merging. The result is re-encrypted and the new backup is restored on the phone.">
+    <div class="in" style="grid-area:in1"><b>Input</b>Backup (.crypt15) and the 64-digit key</div><i class="r" style="grid-area:a1"></i><div style="grid-area:s1"><b>1</b>Decrypt</div><i class="d1" style="grid-area:d1"></i>
+    <div class="in" style="grid-area:in2"><b>Input</b>Export from the other person (.txt or .zip)</div><i class="r" style="grid-area:a2"></i><div style="grid-area:s2"><b>2</b>Read</div><i class="d2" style="grid-area:d2"></i>
+    <div class="tall" style="grid-area:m"><b>3 · 4</b>Plan (preview) and merge</div><i class="r" style="grid-area:am"></i>
+    <div class="tall" style="grid-area:e"><b>5</b>Re-encrypt and verify</div><i class="r" style="grid-area:ae"></i>
+    <div class="tall out" style="grid-area:o"><b>Output</b>New backup, restored on the phone</div>
+  </div>
+  <ol>
+    <li><b>Decrypt.</b> The <code>msgstore.db.crypt15</code> file is opened with the user's 64-digit key and the SQLite database inside is extracted.</li>
+    <li><b>Read.</b> The export sent by the other person is split into messages.</li>
+    <li><b>Plan.</b> The gaps in the chat are found. Each export message is checked to see whether it falls into a gap and whether it is already in the backup. This step writes nothing and is shown as the preview.</li>
+    <li><b>Merge.</b> New rows are added to a copy of the database and the chat's order is rebuilt. All changes happen in a single transaction.</li>
+    <li><b>Re-encrypt.</b> The copy is encrypted with the same key, using the original backup's header. The result is opened again to verify it.</li>
+  </ol>
+  <p>warescue works with end-to-end encrypted Android backups (<code>.crypt15</code>) and one-to-one chats.</p>
+</section>
+
+<section data-id="en-backups" data-title="WhatsApp backups">
+  <h2>WhatsApp backups</h2>
+  <h3>Location and file name</h3>
+  <p>On Android 11 and later, WhatsApp looks for local backups in <code>Android/media/com.whatsapp/WhatsApp/Databases/</code>. The file to restore must be named exactly <code>msgstore.db.crypt14</code> or <code>msgstore.db.crypt15</code>.</p>
+  <p>The same folder also holds dated files such as <code>msgstore-YYYY-MM-DD.1.db.crypt14</code>. These are backups from earlier days and WhatsApp does not restore them on its own. To restore an earlier day, rename the file to <code>msgstore.db.crypt14</code>. If a file with that name is already in the folder, move it somewhere else first.</p>
+  <h3>crypt14 and crypt15</h3>
+  <table>
+    <tr><th></th><th>crypt14</th><th>crypt15</th></tr>
+    <tr><th>Created when</th><td>Default local backup</td><td>End-to-end encrypted backup is on</td></tr>
+    <tr><th>Where the key is</th><td>In the phone's protected storage (<code>/data/data/com.whatsapp/files/key</code>)</td><td>With the user, as a 64-digit hexadecimal key</td></tr>
+    <tr><th>Needed to read it</th><td>Root access</td><td>The key</td></tr>
+    <tr><th>warescue</th><td class="no">Not supported</td><td class="ok">Reads and writes</td></tr>
+  </table>
+  <h3>Moving from a crypt14 to a crypt15 backup</h3>
+  <p>If all you have is a crypt14 backup, restore it in WhatsApp first. Then turn on the end-to-end encrypted backup and take a new one. The new backup holds the same history as crypt15.</p>
+  <ol>
+    <li>In WhatsApp, open <b>Settings › Chats › Chat backup › End-to-end encrypted backup</b>.</li>
+    <li>Tap <b>Turn on</b> and choose to use a <b>64-digit encryption key</b> instead of a password.</li>
+    <li>Save the key somewhere safe. Without it the backup cannot be opened.</li>
+    <li>Tap <b>Create</b>, then <b>Back up</b>.</li>
+  </ol>
+  <p><a href="#en-key">Backing up with a 64-digit key</a> has the steps in more detail. From then on the local backup is written as <code>msgstore.db.crypt15</code>. The password option does not work for this. The password only fetches the real key from WhatsApp's server and cannot open the file.</p>
+</section>
+
+<section data-id="en-format" data-title="The crypt15 file format">
+  <h2>The crypt15 file format</h2>
+  <div class="layoutbar" aria-hidden="true">
+    <span style="flex:1;background:var(--r-len)">length</span><span style="flex:1;background:var(--r-flag)">flag</span>
+    <span style="flex:4;background:var(--r-proto)">protobuf header</span><span style="flex:12;background:var(--r-cipher)">AES-GCM ciphertext</span>
+    <span style="flex:1.5;background:var(--r-tag)">GCM</span><span style="flex:1.5;background:var(--r-mask)">MD5</span>
+  </div>
+  <div class="layoutscale" aria-hidden="true">
+    <span style="flex:1">1 B</span><span style="flex:1">1 B</span><span style="flex:4">N B</span><span style="flex:12">rest of the file</span><span style="flex:1.5">16 B</span><span style="flex:1.5">16 B</span>
+  </div>
+  <div class="hex" data-hex>
+    <div class="cap"><span>The first 64 bytes of a real backup. Tap a byte or a label.</span><span class="mono">msgstore.db.crypt15 · about 147 MB</span></div>
+    <div data-rows></div>
+    <div class="legend" data-legend></div>
+  </div>
+  <table>
+    <tr><th>Part</th><th>Example value</th><th>Meaning</th></tr>
+    <tr><td>Byte 0</td><td><code>0x87</code> = 135</td><td>Length of the protobuf header</td></tr>
+    <tr><td>Byte 1</td><td><code>0x01</code></td><td>Feature table flag. Not every version has it. The protobuf header always starts with <code>0x08</code>, so the two cannot be confused.</td></tr>
+    <tr><td>Field 1</td><td>1</td><td>Key type</td></tr>
+    <tr><td>Field 3.1</td><td>16 bytes</td><td>AES-GCM initialisation vector (IV)</td></tr>
+    <tr><td>Field 4.1</td><td><code>"2.26.38.73"</code></td><td>WhatsApp version that wrote the backup</td></tr>
+    <tr><td>Field 4.3</td><td>2 characters</td><td>Last two digits of the phone number</td></tr>
+    <tr><td>Fields 4.4–4.39</td><td>1</td><td>Database feature flags</td></tr>
+    <tr><td>Field 6</td><td>3</td><td>Meaning unknown. Kept as it is when re-encrypting.</td></tr>
+    <tr><td>Trailer</td><td>16 + 16 bytes</td><td>GCM authentication tag and an MD5 digest of everything before it</td></tr>
+  </table>
+  <h3>Reading protobuf without a schema</h3>
+  <p>The header is read straight from the wire format, without a schema file or a protobuf library (<code>protowire.py</code>). Every field starts with a varint holding <code>field number × 8 + type</code>. Type 0 is followed by a varint. Type 2 is followed by a length and then that many bytes. The format does not say whether a byte string is a nested message or raw data. The reader tries to decode it as a message first and treats it as raw data if that fails.</p>
+  <pre>1a 12 0a 10 ab be …
+<span class="c">1a → field 3, type 2 (bytes), 12 → length 18</span>
+<span class="c">   0a → field 3.1, type 2, 10 → length 16</span>
+<span class="c">      ab be … → IV</span></pre>
+</section>
+
+<section data-id="en-crypto" data-title="Decryption and re-encryption">
+  <h2>Decryption and re-encryption</h2>
+  <div class="flow" aria-label="Key chain">
+    <span class="in">64-digit key (32 bytes)</span><i>→</i><span>HKDF-SHA256</span><i>→</i><span>AES-256-GCM</span><i>→</i><span>zlib</span><i>→</i><span class="in">SQLite</span>
+  </div>
+  <h3>Key derivation</h3>
+  <p>The user's key is not used as the AES key directly. A new 32-byte key is derived with HKDF-SHA256. The salt is 32 zero bytes and the info field is <code>"backup encryption"</code>. Since the output is exactly one block long, the calculation comes down to two HMAC operations.</p>
+  <pre>prk = HMAC-SHA256(key = 32 × 0x00, data = root_key)                  <span class="c"># extract</span>
+aes = HMAC-SHA256(key = prk, data = "backup encryption" ‖ 0x01)      <span class="c"># expand</span></pre>
+  <p>The key can be typed the way WhatsApp shows it. Spaces and dashes are ignored, and 64 hexadecimal digits must remain.</p>
+  <h3>Decryption</h3>
+  <p>The IV is read from header field 3.1. If the MD5 trailer is correct, the ciphertext and the tag are taken together as the encrypted body. If it is not, the layouts with and without the trailer are tried in turn. Nothing is produced unless the GCM tag checks out, and a wrong key is reported as its own error. The decrypted data is inflated with zlib, which gives the SQLite database.</p>
+  <h3>Re-encryption</h3>
+  <ol>
+    <li>The original backup's header is used as a template. The version, the feature flags and the phone digits stay the same.</li>
+    <li>The key is checked by opening the template with it.</li>
+    <li>A new random IV is generated and written in place of the old one. Using the same IV twice with the same key is a security flaw in GCM.</li>
+    <li>The database is compressed with zlib and encrypted with AES-256-GCM. If the template had an MD5 trailer, it is recalculated.</li>
+    <li>The new file is opened again and compared with the database byte by byte. If anything differs, nothing is written.</li>
+  </ol>
+</section>
+
+<section data-id="en-export" data-title="Reading a chat export">
+  <h2>Reading a chat export</h2>
+  <p>An "Export chat" file is text meant for people to read. It has no message ids and no seconds. It only has the minute, the sender's name and the text. Every message starts with a date prefix. Lines without a prefix belong to the message before them.</p>
+  <pre>2.10.2026 13:29 - Contact: hello
+2.10.2026 13:31 - Me: first line
+second line: with a colon too         <span class="c">← continuation line</span></pre>
+  <h3>Recognised prefixes</h3>
+  <table>
+    <tr><th>Source</th><th>Example</th></tr>
+    <tr><td>Android, dotted date</td><td><code>2.10.2026 13:29 - </code></td></tr>
+    <tr><td>iPhone, with seconds</td><td><code>[2.10.2026 13:29:05] </code></td></tr>
+    <tr><td>Android, slashes and a 12-hour clock</td><td><code>10/2/26, 1:29 PM - </code></td></tr>
+  </table>
+  <p>Times are in the time zone of the phone that made the export. They are stored in the database as UTC milliseconds. iPhone exports come as a ZIP file containing <code>_chat.txt</code>, and the text file is taken out of the archive.</p>
+  <h3>Message kinds</h3>
+  <table>
+    <tr><th>Kind</th><th>How it is recognised</th><th>What goes into the database</th></tr>
+    <tr><td>text</td><td>Any message that matches no other kind</td><td>The text itself</td></tr>
+    <tr><td>media_omitted</td><td>The whole message is <code>&lt;… omitted&gt;</code> or <code>&lt;… dahil edilmedi&gt;</code></td><td><code>📎 Medya (yedekte yok)</code></td></tr>
+    <tr><td>media / contact</td><td><code>file.ext (file attached)</code>. A <code>.vcf</code> file is a contact card.</td><td>The file name and its caption, if any</td></tr>
+    <tr><td>location</td><td>Starts with <code>location:</code></td><td>The text itself</td></tr>
+    <tr><td>poll</td><td>Starts with <code>POLL:</code></td><td>The text itself</td></tr>
+    <tr><td>deleted</td><td>"This message was deleted" and its Turkish forms</td><td><code>🚫 Bu mesaj silindi</code></td></tr>
+    <tr><td>system</td><td>No "Name: " after the prefix</td><td>Not added</td></tr>
+  </table>
+  <h3>Clean-up</h3>
+  <ul>
+    <li>WhatsApp adds invisible direction marks such as U+200E to names and file lines. These marks and the BOM are removed, and narrow or non-breaking spaces become normal spaces. That way the name "Me" matches the same way everywhere.</li>
+    <li>The "This message was edited" marker at the end of edited messages is taken off the text.</li>
+    <li>Media markers count only when they are the whole message. Pasted text that contains tags like <code>&lt;div&gt;</code> is not mistaken for media.</li>
+    <li>If the phone's language changed, one file can contain markers in two languages. Both are recognised.</li>
+  </ul>
+  <h3>Who the sender is</h3>
+  <p>The export is made on the other person's phone, so you appear under the name they saved you as. You have to say which sender is you. The wizard asks "Which one is you?" and the command line uses <code>--me</code>. This choice sets the <code>from_me</code> field.</p>
+</section>
+
+<section data-id="en-database" data-title="Database model">
+  <h2>Database model</h2>
+  <p>The decrypted database has hundreds of tables. Four of them are enough for merging.</p>
+  <table>
+    <tr><th>Table</th><th>Fields used</th><th>Role</th></tr>
+    <tr><td>jid</td><td><code>_id, user, server</code></td><td>Contact identity. The phone number is looked up in rows with <code>server = 's.whatsapp.net'</code>.</td></tr>
+    <tr><td>jid_map</td><td><code>lid_row_id, jid_row_id</code></td><td>Links the newer hidden identity (LID) to the phone identity</td></tr>
+    <tr><td>chat</td><td><code>jid_row_id</code>, the last, displayed and read message pointers, <code>sort_timestamp</code></td><td>The chat list</td></tr>
+    <tr><td>message</td><td>See the table below</td><td>Messages</td></tr>
+  </table>
+  <h3>Inserted message rows</h3>
+  <table>
+    <tr><th>Field</th><th>Incoming</th><th>Outgoing</th></tr>
+    <tr><td><code>from_me</code></td><td>0</td><td>1</td></tr>
+    <tr><td><code>key_id</code></td><td colspan="2">Random, 32 upper-case hexadecimal digits</td></tr>
+    <tr><td><code>status</code></td><td>0</td><td>13 (read)</td></tr>
+    <tr><td><code>timestamp</code></td><td colspan="2">The calculated time (ms, UTC)</td></tr>
+    <tr><td><code>received_timestamp</code></td><td><code>timestamp + 500</code></td><td>0</td></tr>
+    <tr><td><code>receipt_server_timestamp</code></td><td>−1</td><td><code>timestamp</code></td></tr>
+    <tr><td><code>message_type</code></td><td colspan="2">0 (text)</td></tr>
+    <tr><td><code>sort_id</code></td><td colspan="2">Assigned during re-sorting</td></tr>
+  </table>
+  <h3><code>sort_id</code></h3>
+  <p>The chat screen sorts messages by <code>sort_id</code>, not by time. WhatsApp gives a new message the next <code>_id</code> and sets its <code>sort_id</code> to the same value. The merge algorithm and the repair tool are built around these two rules.</p>
+</section>
+
+<section data-id="en-merge" data-title="The merge algorithm">
+  <h2>The merge algorithm</h2>
+  <p>The merge works on a copy of the decrypted database. All changes happen in a single transaction, so either all of them are applied or none are. The source file is never written to.</p>
+  <div class="gaps" aria-label="Gap detection diagram">
+    <div class="g-row"><span>Backup</span><div class="g-track">
+      <i class="open" style="left:0;width:10%"></i><i class="have" style="left:10%;width:24%"></i>
+      <i class="have" style="left:37%;width:13%"></i><i class="have" style="left:80%;width:10%"></i><i class="open" style="left:90%;width:10%"></i>
+    </div></div>
+    <div class="g-row"><span>Export</span><div class="g-track"><i class="export" style="left:4%;width:96%"></i></div></div>
+    <div class="g-row"><span>Result</span><div class="g-track">
+      <i class="add" style="left:4%;width:6%"></i><i class="have" style="left:10%;width:24%"></i><i class="have" style="left:37%;width:13%"></i>
+      <i class="add" style="left:50%;width:30%"></i><i class="have" style="left:80%;width:10%"></i><i class="add" style="left:90%;width:10%"></i>
+    </div></div>
+    <div class="g-labels"><span style="left:5%">open head</span><span style="left:35.5%">under 30 days<br>left alone</span><span style="left:65%">30 days or more<br>filled</span><span style="left:95%">open tail</span></div>
+  </div>
+  <div class="key"><span><b class="have"></b>in the backup</span><span><b class="add"></b>added</span><span><b class="open"></b>open head and tail</span></div>
+  <ol>
+    <li><b>Find the chat.</b> The last 7 or more digits of the phone number lead to the <code>jid</code> and then to the <code>chat</code>. Exactly one chat must match. If the same person also has a LID chat with messages in it, the merge stops so the history is never split across two chats.</li>
+    <li><b>Find the gaps.</b> The chat's timestamps are sorted. Every silence of 30 days or more between two messages is a gap (<code>--min-gap-days</code>). The open head before the first message and the open tail after the last message are gaps too.</li>
+    <li><b>Assign messages to gaps.</b> Each export message's minute is placed into its gap with a binary search. A message that falls into no gap is already in the backup and is skipped. If a <code>since</code> date is given, earlier messages are not looked at.</li>
+    <li><b>Remove duplicates at the edges.</b> Messages are compared with what the backup holds in a 10-minute window at each end of the gap. "Design considerations" explains how.</li>
+    <li><b>Generate times.</b> Messages from the same minute are spread evenly over its seconds, which keeps them in order.</li>
+    <li><b>Fit into the gap.</b> A two-pass adjustment moves every timestamp inside the gap and makes it larger than the one before.</li>
+    <li><b>Insert and re-sort.</b> New rows are placed into the existing order by time. Every row after the first new one gets a new <code>sort_id</code> above the largest value in the table.</li>
+    <li><b>Pointers and counter.</b> The chat's last, displayed and read message pointers are updated. The <code>message</code> counter in <code>sqlite_sequence</code> is raised to the largest <code>sort_id</code>.</li>
+    <li><b>Verify.</b> <code>PRAGMA quick_check</code> runs. If anything fails, the unfinished output file is deleted.</li>
+  </ol>
+  <h3>Two-pass fitting</h3>
+  <p>Seconds spread over a minute can end up outside the gap. For example, the gap ends at 14:05:10 but three messages from that minute were spread to 14:05:00, 14:05:20 and 14:05:40. Their times are corrected without changing their order.</p>
+  <pre>lo, hi = gap.start + 1, gap.end − 1
+<span class="c"># forward pass: push above the start and above the previous row</span>
+prev = lo − 1
+for row in rows:            row.ts = prev = max(row.ts, prev + 1)
+<span class="c"># backward pass: pull below the end and below the next row</span>
+next = hi + 1
+for row in reversed(rows):  row.ts = next = min(row.ts, next − 1)</pre>
+  <p>If the gap has fewer milliseconds than messages, the merge stops with an error and nothing is written.</p>
+  <h3>Re-sorting and several chats</h3>
+  <p>Existing rows in <code>sort_id</code> order and new rows in time order are combined into one sequence with a two-pointer merge. Rows after the first new one are renumbered. Nothing before it is touched, and existing messages keep their order among themselves. Several exports are processed one after another and each one reads the previous output. Two exports for the same chat are not accepted.</p>
+</section>
+
+<section data-id="en-ordering" data-title="Ordering and repair">
+  <h2>Ordering and repair</h2>
+  <p>The <code>sort_id</code> values of added rows go above the largest <code>_id</code> in the table. If the counter is not raised, a message WhatsApp creates after the restore gets a smaller number and drops into the middle of the chat. It shows up in the chat list but not at the bottom of the chat.</p>
+  <div class="sorts">
+    <div>
+      <h4 class="no">Without raising the counter</h4>
+      <ol>
+        <li><span class="s">1</span>old message</li><li><span class="s">2</span>old message</li>
+        <li class="new bad"><span class="s">3</span>new message (stuck in the middle)</li>
+        <li class="add"><span class="s">101</span>added message</li><li class="add"><span class="s">102</span>added message</li><li class="add"><span class="s">103</span>added message</li>
+      </ol>
+    </div>
+    <div>
+      <h4 class="ok">After raising the counter to the largest <code>sort_id</code></h4>
+      <ol>
+        <li><span class="s">1</span>old message</li><li><span class="s">2</span>old message</li>
+        <li class="add"><span class="s">101</span>added message</li><li class="add"><span class="s">102</span>added message</li><li class="add"><span class="s">103</span>added message</li>
+        <li class="new"><span class="s">104</span>new message (at the bottom)</li>
+      </ol>
+    </div>
+  </div>
+  <p>That is why every merge ends by raising the counter to the largest <code>sort_id</code>. The <code>repair</code> command is for backups made before this fix.</p>
+  <ol>
+    <li><b>Check the baseline.</b> The merged database that was restored to the phone is the baseline. At least three of its last five rows must be in the current backup with the same <code>_id</code> and <code>key_id</code>. Otherwise the repair stops.</li>
+    <li><b>Find new rows.</b> Rows after the baseline's largest <code>_id</code> were written after the restore.</li>
+    <li><b>Move them.</b> If these rows sit in the middle of their chat, or share a <code>sort_id</code> with an older row, they are moved to the end of the chat in time order.</li>
+    <li><b>Counter.</b> The counter is raised to the largest <code>sort_id</code>. Later messages then land at the bottom on their own.</li>
+  </ol>
+</section>
+
+<section data-id="en-design" data-title="Design considerations">
+  <h2>Design considerations</h2>
+  <h3>A 30-day gap threshold</h3>
+  <p>With a shorter threshold, many small gaps show up inside history that is already backed up. They do not come from a real loss. Media messages have no text in the backup but a placeholder in the export, so the texts do not match. Messages the user deleted "for me" also stay in the other person's file. The 30-day threshold fills only real breaks. A <code>since</code> date also makes sure nothing before that day is touched.</p>
+  <h3>Open head and open tail</h3>
+  <p>If nobody wrote to a contact after the restore, the missing period is at the end of the chat rather than between two messages. With no backup at all, the whole history sits at the start. So the start and the end of a chat are treated as gaps too.</p>
+  <h3>Matching at the edges</h3>
+  <p>Two sets are built from the 10-minute window at each end of a gap. The first holds <code>(from_me, text)</code> pairs for messages with text. The second holds <code>(from_me, minute)</code> pairs for rows without text, such as photos, stickers and system rows.</p>
+  <table>
+    <tr><th>Message in the export</th><th>In the backup, at the gap edge</th><th>Decision</th></tr>
+    <tr><td>14:02 Me: ok</td><td>14:02:37 Me: ok</td><td class="no">Same text, not added</td></tr>
+    <tr><td>14:05 Contact: &lt;Media omitted&gt;</td><td>14:05:10 Contact: photo, no text</td><td class="no">A row without text in the same minute, not added</td></tr>
+    <tr><td>14:20 Contact: see you</td><td>None</td><td class="ok">No match, added</td></tr>
+  </table>
+  <h3>The minute where two gaps meet</h3>
+  <p>A gap can end with a message at 14:05:10 while the next gap starts with that same message. The time alone then cannot tell which gap the export messages from 14:05 belong to. The boundary message decides. Until it appears in the export the earlier gap applies, and after it the later one.</p>
+  <h3>Protecting the source</h3>
+  <p>The input database is never changed. Every write happens on a copy in a single transaction. The transaction ends with <code>PRAGMA quick_check</code>, and the unfinished file is deleted if it fails. The re-encrypted file is also opened again before it is written.</p>
+  <h3>On the phone</h3>
+  <ul>
+    <li>Uninstalling the app deletes the <code>Android/media/com.whatsapp</code> folder. The local backups and media live there. Copy the folder to the computer before uninstalling.</li>
+    <li>A restore only uses the file named <code>msgstore.db.crypt15</code> in the right folder. Before reinstalling the app, create the <code>Android/media/com.whatsapp/WhatsApp/Databases</code> folders and put the file inside. <a href="#en-restore">Restoring the backup on the phone</a> has the steps.</li>
+    <li>The backup header carries the last two digits of the phone number. The backup cannot be restored with another number.</li>
+    <li>If "Skip" is tapped on the restore screen, the same installation will not ask again. The app has to be reinstalled.</li>
+    <li>Do not take a new backup until the recovery is done. A backup of the empty chats could overwrite the one you have.</li>
+    <li>Take a new backup as soon as the restore has finished.</li>
+  </ul>
+</section>
+
+<section data-id="en-wizard" data-title="Using the wizard">
+  <h2>Using the wizard</h2>
+  <p>The <code>warescue ui</code> command opens a six-step wizard in the browser. Long operations run in the background. Reloading the page picks up at the same step.</p>
+  <table>
+    <tr><th>Step</th><th>What happens</th><th>What to have ready</th></tr>
+    <tr><td>1. Backup</td><td>The backup file is chosen. Its layout and checksum are checked.</td><td><code>msgstore.db.crypt15</code></td></tr>
+    <tr><td>2. Key</td><td>The backup is opened on a copy. Message and chat counts are shown.</td><td>The 64-digit key</td></tr>
+    <tr><td>3. Chats</td><td>Exports are added. Your name and the contact's number are entered.</td><td>The export files</td></tr>
+    <tr><td>4. Preview</td><td>For each chat, the messages to add and to skip are shown with a monthly chart. Nothing is written yet.</td><td>Nothing</td></tr>
+    <tr><td>5. New backup</td><td>The merge and encryption run. The result is verified and saved.</td><td>Nothing</td></tr>
+    <tr><td>6. Restore on phone</td><td>A checklist guides the steps on the phone. At the end the unencrypted files are deleted.</td><td>A USB cable or a secure way to transfer over the internet</td></tr>
+  </table>
+</section>
+
+<section data-id="en-commands" data-title="Command reference">
+  <h2>Command reference</h2>
+  <table>
+    <tr><th>Command</th><th>What it does</th><th>Important options</th></tr>
+    <tr><td><code>inspect</code></td><td>Shows the file layout, a hex dump and the header tree. Needs no key.</td><td></td></tr>
+    <tr><td><code>decrypt</code></td><td>Turns a crypt15 file into a SQLite database and prints table and message counts.</td><td><code>--force</code></td></tr>
+    <tr><td><code>parse</code></td><td>Summarises an export with its senders, message kinds and date range.</td><td><code>--me</code>, <code>--tz</code></td></tr>
+    <tr><td><code>merge</code></td><td>Fills the gaps from an export and writes a new copy.</td><td><code>--phone</code>, <code>--me</code>, <code>--out</code>, <code>--dry-run</code>, <code>--since</code>, <code>--min-gap-days</code>, <code>--skip-media</code>, <code>--tz</code></td></tr>
+    <tr><td><code>encrypt</code></td><td>Turns the SQLite database back into crypt15 using the original backup as a template, then opens the result to verify it.</td><td><code>--force</code></td></tr>
+    <tr><td><code>repair</code></td><td>Moves messages that ended up mid-chat after a restore to the end and fixes the counter.</td><td><code>--baseline</code>, <code>--out</code>, <code>--dry-run</code></td></tr>
+    <tr><td><code>ui</code></td><td>Opens the wizard.</td><td><code>--port</code>, <code>--workspace</code>, <code>--no-browser</code></td></tr>
+  </table>
+  <h3>Full flow</h3>
+  <pre>warescue inspect private/msgstore.db.crypt15
+warescue decrypt private/msgstore.db.crypt15 private/msgstore.db
+warescue parse   private/chats/contact/_chat.txt
+warescue merge   private/msgstore.db private/chats/contact/_chat.txt \
+                 --phone 5XXXXXXXXX --me "Name" --since 2024-10-01 --dry-run
+warescue merge   … --out private/merged.db
+warescue encrypt private/merged.db private/msgstore.db.crypt15 private/out/msgstore.db.crypt15</pre>
+  <p>The key is never passed as an argument. It is read from the <code>WA_BACKUP_KEY</code> environment variable or from a hidden prompt.</p>
+  <h3><code>merge</code> options</h3>
+  <table>
+    <tr><th>Option</th><th>Meaning</th></tr>
+    <tr><td><code>--phone</code></td><td>The contact's number. The last 7 digits are enough.</td></tr>
+    <tr><td><code>--me</code></td><td>The name you appear under in the export, exactly as written</td></tr>
+    <tr><td><code>--since YYYY-MM-DD</code></td><td>Export messages before this date are ignored.</td></tr>
+    <tr><td><code>--min-gap-days N</code></td><td>Silences shorter than N days are not gaps. The default is 30.</td></tr>
+    <tr><td><code>--skip-media</code></td><td>Media placeholders are not added.</td></tr>
+    <tr><td><code>--tz</code></td><td>Time zone of the phone that made the export. The default is <code>Europe/Istanbul</code>.</td></tr>
+  </table>
+  <h3>Common error messages</h3>
+  <table>
+    <tr><th>Message</th><th>Meaning</th></tr>
+    <tr><td><code>authentication failed</code></td><td>The key is wrong or the file is crypt14.</td></tr>
+    <tr><td><code>expected exactly one chat</code></td><td>Give more digits in <code>--phone</code>. Check that the number belongs to a one-to-one chat.</td></tr>
+    <tr><td><code>--me … is not a sender</code></td><td>Copy the name from the <code>parse</code> output exactly, emoji included.</td></tr>
+    <tr><td><code>contact also has a LID chat</code></td><td>The contact has a second chat. This is not supported yet.</td></tr>
+    <tr><td><code>export has more than two senders</code></td><td>It is a group chat, which is not supported.</td></tr>
+    <tr><td><code>row ids differ</code> (repair)</td><td>The baseline is not the database the phone was restored from.</td></tr>
+  </table>
+</section>
+
+<section data-id="en-security" data-title="Security and privacy">
+  <h2>Security and privacy</h2>
+  <ul>
+    <li><b>Purpose.</b> warescue is not a cracking tool. It only opens the user's own backup with the key the user chose.</li>
+    <li><b>Network.</b> No network requests are made while it runs. The wizard listens only on <code>127.0.0.1</code>, on a random port. Its pages load nothing from outside.</li>
+    <li><b>Session.</b> Every API request has to carry the session token. The token is read from the <code>#t=…</code> part of the address. Requests from other websites are refused by the <code>Host</code>, <code>Origin</code> and fetch metadata checks.</li>
+    <li><b>Backup key.</b> It is never written to disk, never logged and never taken as a command-line argument. The wizard keeps it in memory only and wipes it when the session ends or the unencrypted files are deleted.</li>
+    <li><b>Unencrypted files.</b> The decrypted database and the exports hold every message in plain text. Delete them when you are done. The encrypted <code>.crypt15</code> files can be kept.</li>
+    <li><b>Repository.</b> <code>.gitignore</code> keeps files that may hold personal data (<code>private/</code>, <code>*.crypt1*</code>, <code>*.db</code>, <code>*.key</code>, <code>_chat*.txt</code>) out of the repository. Tests use synthetic data only.</li>
+    <li><b>Terms of use.</b> Editing a backup by hand is not something WhatsApp supports. Keep the original files until the result is verified.</li>
+    <li><b>Origin.</b> Everything known about the file format was worked out within this project by examining backups. warescue uses no code from other projects.</li>
+  </ul>
+</section>
+
+<section data-id="en-roadmap" data-title="Open for improvement">
+  <h2>Open for improvement</h2>
+  <table>
+    <tr><th>Topic</th><th>Today</th><th>Possible approach</th></tr>
+    <tr><td>Search index</td><td>Added messages may not show up in WhatsApp search.</td><td>Fill the <code>message_ftsv2</code> table</td></tr>
+    <tr><td>Media files</td><td>Photos and videos appear as placeholder text.</td><td>Use exports with media and the <code>message_media</code> table</td></tr>
+    <tr><td>Replies and quotes</td><td>Exports do not contain this information.</td><td>None for now</td></tr>
+    <tr><td>Seconds</td><td>Times within a minute are estimated.</td><td>None for now</td></tr>
+    <tr><td>Group chats</td><td>Not supported.</td><td>Map each sender to a <code>sender_jid_row_id</code></td></tr>
+    <tr><td>LID chat with messages</td><td>The merge stops for safety.</td><td>A way to combine the two chats</td></tr>
+    <tr><td>"Delete for me"</td><td>Deleted messages may come back in long gaps.</td><td>Limited with <code>since</code> for now</td></tr>
+    <tr><td>Gap threshold in the wizard</td><td>Can only be changed on the command line.</td><td>Add a setting to the preview step</td></tr>
+  </table>
+  <h3>For contributors</h3>
+  <ul>
+    <li>Open an issue in the repository for a problem or an idea. Describe what you did, what you expected and what happened.</li>
+    <li>Send code as a pull request.</li>
+    <li>Every change needs tests. A new behaviour or a fixed bug comes with a test that shows it. <code>pytest -q</code> must pass before you send it.</li>
+    <li>Tests use synthetic data only. Never share a real backup, export or key. If a bug needs data to show, rebuild the case with a synthetic example.</li>
+    <li>New export formats or languages are a good place to start. Look at <code>chatexport.py</code> and its tests.</li>
+  </ul>
+</section>
+
+<section data-id="en-structure" data-title="Project structure and tests">
+  <h2>Project structure and tests</h2>
+  <pre>src/warescue/
+├── protowire.py    <span class="c"># schema-less protobuf reader and writer</span>
+├── crypt15.py      <span class="c"># file layout, HKDF, AES-GCM, zlib, re-encryption</span>
+├── chatexport.py   <span class="c"># export reader</span>
+├── merge.py        <span class="c"># gap finding, matching, insertion, ordering</span>
+├── repair.py       <span class="c"># ordering repair after a restore</span>
+├── service.py      <span class="c"># operations shared by the command line and the wizard</span>
+├── cli.py          <span class="c"># command line</span>
+└── ui/             <span class="c"># wizard: local server, endpoints, job runner, pages</span>
+tests/              <span class="c"># synthetic data only</span></pre>
+  <p>The tests cover these areas.</p>
+  <ul>
+    <li>Varint and protobuf reading, and the hand-written HKDF giving the same result as the library</li>
+    <li>The four combinations of flag byte and MD5 trailer, wrong keys, and a fresh IV on every encryption</li>
+    <li>Export formats, invisible characters and markers in two languages</li>
+    <li>Gap filling, duplicates at the edges, open head and tail, an install with no backup, the shared minute and <code>since</code></li>
+    <li>An unchanged source, consistent pointers, unique <code>sort_id</code> values and repair</li>
+    <li>The wizard's session security, its endpoints, and the key never appearing in a response or a file</li>
+  </ul>
+  <p class="dim">Names and numbers in the examples are not real.</p>
+</section>
+
+  </main>
+</div>
+
+  <div class="pager" id="pager">
+    <button type="button" id="prev"></button>
+    <span class="spacer"></span>
+    <span class="where" id="where"></span>
+    <span class="spacer"></span>
+    <button type="button" id="next"></button>
+  </div>
+</div>
+
+<script nonce="__CSP_NONCE__">
+"use strict";
+
+const UI = {
+  tr: { back: "← Sihirbaza dön", title: "warescue: nasıl çalışır", lang: "Dil",
+        prev: "← Önceki", next: "Sonraki →", where: (i, n) => `Bölüm ${i} / ${n}`,
+        byte: "bayt", added: "mesaj eklendi" },
+  en: { back: "← Back to the wizard", title: "warescue: how it works", lang: "Language",
+        prev: "← Previous", next: "Next →", where: (i, n) => `Section ${i} of ${n}`,
+        byte: "byte", added: "messages added" },
+};
+
+const store = {
+  get(name) { try { return localStorage.getItem(name); } catch { return null; } },
+  set(name, value) { try { localStorage.setItem(name, value); } catch {} },
+};
+const $ = (id) => document.getElementById(id);
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+const browserLang = (navigator.languages?.[0] ?? navigator.language ?? "").toLowerCase().startsWith("tr") ? "tr" : "en";
+let lang = { tr: "tr", en: "en" }[store.get("warescue.lang")] ?? browserLang;
+let index = 0;
+const docOf = (l) => document.querySelector(`.doc[data-lang="${l}"]`);
+const sectionsOf = (l) => [...docOf(l).querySelectorAll("main > section")];
+
+for (const l of ["tr", "en"]) {
+  const list = docOf(l).querySelector("nav.toc ol");
+  sectionsOf(l).forEach((section, i) => {
+    list.append(el("li", {}, el("a", { href: `#${section.dataset.id}` },
+      el("span", { className: "n", textContent: String(i + 1) }), section.dataset.title)));
+  });
+}
+
+function show(i, focus = false) {
+  const sections = sectionsOf(lang);
+  index = Math.max(0, Math.min(i, sections.length - 1));
+  sections.forEach((section, k) => { section.hidden = k !== index; });
+  for (const a of docOf(lang).querySelectorAll("nav.toc a")) {
+    if (a.getAttribute("href") === `#${sections[index].dataset.id}`) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  }
+  const t = UI[lang];
+  $("prev").disabled = index === 0;
+  $("next").disabled = index === sections.length - 1;
+  $("prev").textContent = t.prev;
+  $("next").textContent = t.next;
+  $("where").textContent = t.where(index + 1, sections.length);
+  if (location.hash !== `#${sections[index].dataset.id}`) history.replaceState(null, "", `#${sections[index].dataset.id}`);
+  closePop();
+  if (focus) {
+    window.scrollTo(0, 0);
+    sections[index].querySelector("h2").setAttribute("tabindex", "-1");
+    sections[index].querySelector("h2").focus({ preventScroll: true });
+  }
+}
+
+function fromHash() {
+  const id = location.hash.slice(1);
+  for (const l of ["tr", "en"]) {
+    const i = sectionsOf(l).findIndex((s) => s.dataset.id === id);
+    if (i >= 0) { setLanguage(l, i); return; }
+  }
+  setLanguage(lang, 0);
+}
+
+function setLanguage(l, i = index) {
+  lang = l;
+  document.documentElement.lang = l;
+  for (const doc of document.querySelectorAll(".doc")) doc.hidden = doc.dataset.lang !== l;
+  $("back").textContent = UI[l].back;
+  $("title-text").textContent = UI[l].title;
+  $("lang-label").textContent = UI[l].lang;
+  $("lang").value = l;
+  show(i);
+}
+
+$("prev").addEventListener("click", () => show(index - 1, true));
+$("next").addEventListener("click", () => show(index + 1, true));
+// Sections carry data-id rather than id, so a #section link never makes the
+// browser scroll the title bar out of view.
+window.addEventListener("hashchange", () => { fromHash(); window.scrollTo(0, 0); });
+$("lang").addEventListener("change", (e) => {
+  store.set("warescue.lang", e.target.value);
+  setLanguage(e.target.value);
+});
+
+const T0 = Date.UTC(2019, 0, 1), T1 = Date.UTC(2026, 11, 31);
+const pct = (y, m, d) => ((Date.UTC(y, m - 1, d) - T0) / (T1 - T0)) * 100;
+const OUTCOME = [
+  { name: { tr: "Kişi 1", en: "Contact 1" }, sub: { tr: "2019'dan beri", en: "since 2019" }, n: 135000,
+    segs: [["have", [2019, 5, 1], [2024, 10, 1]], ["add", [2024, 10, 1], [2026, 10, 1]]] },
+  { name: { tr: "Kişi 2", en: "Contact 2" }, sub: { tr: "dışa aktarım 2025'ten", en: "export from 2025" }, n: 15700,
+    segs: [["have", [2023, 1, 1], [2024, 8, 1]], ["add", [2025, 6, 1], [2026, 10, 1]]] },
+  { name: { tr: "Kişi 3", en: "Contact 3" }, sub: { tr: "iki boşluk", en: "two gaps" }, n: 20400,
+    segs: [["have", [2019, 1, 1], [2019, 5, 1]], ["add", [2020, 1, 1], [2020, 4, 1]],
+           ["have", [2020, 4, 1], [2024, 10, 1]], ["add", [2024, 10, 1], [2026, 10, 1]]] },
+];
+
+for (const box of document.querySelectorAll('[data-chart="outcome"]')) {
+  const l = box.closest(".doc").dataset.lang;
+  const fmt = new Intl.NumberFormat(l === "tr" ? "tr-TR" : "en-GB");
+  for (const row of OUTCOME) {
+    const track = el("div", { className: "c-track" });
+    track.setAttribute("role", "img");
+    track.setAttribute("aria-label", `${row.name[l]}: ≈ ${fmt.format(row.n)} ${UI[l].added}`);
+    for (const [kind, a, b] of row.segs) {
+      const seg = el("i", { className: kind });
+      seg.style.left = `${pct(...a)}%`;
+      seg.style.width = `${pct(...b) - pct(...a)}%`;
+      track.append(seg);
+    }
+    box.append(el("div", { className: "c-row" },
+      el("div", { className: "c-name" }, row.name[l], el("small", { textContent: row.sub[l] })),
+      track, el("div", { className: "c-num", textContent: `≈ +${fmt.format(row.n)}` })));
+  }
+  const years = el("div", { className: "c-years" });
+  for (let y = 2019; y <= 2026; y++) {
+    const label = el("span", { textContent: String(y) });
+    label.style.left = `${pct(y, 7, 1)}%`;
+    years.append(label);
+  }
+  box.append(el("div", { className: "c-axis" }, el("div"), years, el("div")));
+}
+
+// The first 64 bytes of a real backup. Bytes 40-41 (field 4.3, the last two
+// digits of the phone number) are zeroed here and shown masked.
+const BYTES = ("87 01 08 01 1a 12 0a 10 ab be 1e 61 59 a0 38 8e f4 5d a5 05 28 fe c9 99 22 6d 0a 0a " +
+               "32 2e 32 36 2e 33 38 2e 37 33 1a 02 00 00 20 01 28 01 30 01 38 01 40 01 48 01 50 01 " +
+               "58 01 60 01 68 01 70 01").split(" ");
+
+function regionOf(i) {
+  if (i === 0) return "len";
+  if (i === 1) return "flag";
+  if (i <= 3) return "key";
+  if (i <= 7) return "ivhdr";
+  if (i <= 23) return "iv";
+  if (i <= 27) return "info";
+  if (i <= 37) return "ver";
+  if (i <= 39) return "info";
+  if (i <= 41) return "mask";
+  return "feat";
+}
+
+const REGIONS = {
+  len: { color: "--r-len",
+    tr: ["Başlık uzunluğu", "0x87 = 135. Arkasından gelen protobuf başlığın bayt sayısıdır. Şifreli veri 1 + 1 + 135 = 137. bayttan başlar."],
+    en: ["Header length", "0x87 = 135, the number of bytes in the protobuf header that follows. The ciphertext starts at byte 1 + 1 + 135 = 137."] },
+  flag: { color: "--r-flag",
+    tr: ["Özellik bayrağı", "0x01: başlıkta bir özellik tablosu bulunur. Bazı sürümlerde bu bayt yoktur. Protobuf başlık her zaman 0x08 ile başladığı için ikisi karışmaz."],
+    en: ["Feature flag", "0x01: the header contains a feature table. Some versions omit this byte. The protobuf header always starts with 0x08, so the two cannot be confused."] },
+  key: { color: "--r-proto",
+    tr: ["Alan 1: anahtar türü", "08 01 → alan 1, varint, değer 1."],
+    en: ["Field 1: key type", "08 01 → field 1, varint, value 1."] },
+  ivhdr: { color: "--r-proto",
+    tr: ["Alan 3: IV kabı", "1a 12 → alan 3, 18 baytlık bir alt mesaj. İçindeki 0a 10 → alan 3.1, 16 bayt. IV bu yoldadır: 3.1."],
+    en: ["Field 3: IV container", "1a 12 → field 3, an 18-byte nested message. Inside, 0a 10 → field 3.1, 16 bytes. The IV lives at this path: 3.1."] },
+  iv: { color: "--r-iv",
+    tr: ["IV (16 bayt)", "AES-GCM başlatma vektörü. Gizli değildir ama her şifrelemede yeni olmalıdır. Yeniden şifrelemede bu 16 bayt rastgele yenisiyle değiştirilir."],
+    en: ["IV (16 bytes)", "The AES-GCM initialisation vector. It is not secret, but it must be new for every encryption. Re-encryption replaces these 16 bytes with fresh random ones."] },
+  info: { color: "--r-proto",
+    tr: ["Alan 4: yedek bilgisi", "22 6d → alan 4, 109 baytlık alt mesaj. İçinde sürüm, numara haneleri ve özellik bayrakları bulunur."],
+    en: ["Field 4: backup info", "22 6d → field 4, a 109-byte nested message holding the version, the phone digits and the feature flags."] },
+  ver: { color: "--r-proto",
+    tr: ["Alan 4.1: WhatsApp sürümü", "\"2.26.38.73\": yedeği yazan uygulama sürümü, düz ASCII."],
+    en: ["Field 4.1: WhatsApp version", "\"2.26.38.73\": the app version that wrote the backup, plain ASCII."] },
+  mask: { color: "--r-mask",
+    tr: ["Alan 4.3: numara haneleri", "Telefon numarasının son iki hanesi. WhatsApp yedeğin bu numaraya ait olup olmadığını buna göre anlar. Bu belgede maskelenmiştir."],
+    en: ["Field 4.3: phone digits", "The last two digits of the phone number. WhatsApp uses them to tell whether the backup belongs to this number. Masked in this document."] },
+  feat: { color: "--r-proto",
+    tr: ["Alan 4.4–4.39: özellikler", "20 01, 28 01, 30 01 …: her biri bir alan numarası ve değer 1. Yedekteki veritabanı özelliklerini gösteren bayrak listesidir."],
+    en: ["Fields 4.4–4.39: features", "20 01, 28 01, 30 01 …: each a field number with value 1. A list of flags for the database features in the backup."] },
+};
+const LEGEND = ["len", "flag", "ivhdr", "iv", "ver", "mask", "feat"];
+
+let pop = null;
+function closePop() {
+  pop?.remove();
+  pop = null;
+  for (const b of document.querySelectorAll(".hex .on")) b.classList.remove("on");
+  for (const b of document.querySelectorAll(".hex .legend button")) b.setAttribute("aria-pressed", "false");
+}
+
+function openPop(box, region, anchor, l) {
+  closePop();
+  for (const b of box.querySelectorAll(".b")) b.classList.toggle("on", b.dataset.r === region);
+  for (const b of box.querySelectorAll(".legend button")) b.setAttribute("aria-pressed", String(b.dataset.r === region));
+  const [name, text] = REGIONS[region][l];
+  pop = el("div", { className: "pop" }, el("strong", { textContent: name }), text);
+  pop.setAttribute("role", "status");
+  pop.style.setProperty("--rc", `var(${REGIONS[region].color})`);
+  box.append(pop);
+  const boxRect = box.getBoundingClientRect();
+  const at = anchor.getBoundingClientRect();
+  const left = Math.min(at.left - boxRect.left, box.clientWidth - pop.offsetWidth - 14);
+  pop.style.left = `${Math.max(14, left)}px`;
+  pop.style.top = `${at.bottom - boxRect.top + 6}px`;
+}
+
+function buildHex(box, l) {
+  const rows = box.querySelector("[data-rows]");
+  const legend = box.querySelector("[data-legend]");
+  for (let row = 0; row < 4; row++) {
+    const bytes = el("span", { className: "bytes" });
+    for (let c = 0; c < 16; c++) {
+      const i = row * 16 + c;
+      const region = regionOf(i);
+      const button = el("button", { type: "button", className: c === 8 ? "b gap" : "b",
+                                    textContent: region === "mask" ? "••" : BYTES[i] });
+      button.dataset.r = region;
+      button.style.setProperty("--rc", `var(${REGIONS[region].color})`);
+      button.setAttribute("aria-label", `${UI[l].byte} ${i}: ${REGIONS[region][l][0]}`);
+      button.addEventListener("click", (e) => { e.stopPropagation(); openPop(box, region, button, l); });
+      bytes.append(button);
+    }
+    rows.append(el("div", { className: "row" },
+      el("span", { className: "off", textContent: (row * 16).toString(16).padStart(8, "0") }), bytes));
+  }
+  for (const key of LEGEND) {
+    const button = el("button", { type: "button" }, el("i"), REGIONS[key][l][0]);
+    button.dataset.r = key;
+    button.setAttribute("aria-pressed", "false");
+    button.querySelector("i").style.setProperty("--rc", `var(${REGIONS[key].color})`);
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openPop(box, key, box.querySelector(`.b[data-r="${key}"]`), l);
+    });
+    legend.append(button);
+  }
+}
+
+for (const doc of document.querySelectorAll(".doc")) buildHex(doc.querySelector("[data-hex]"), doc.dataset.lang);
+document.addEventListener("click", (e) => { if (pop && !pop.contains(e.target)) closePop(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePop(); });
+
+fromHash();
+</script>
+</body>
+</html>

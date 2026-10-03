@@ -1,0 +1,1540 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>warescue</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M6 3h20a4 4 0 0 1 4 4v13a4 4 0 0 1-4 4H14l-7 6v-6H6a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4z' fill='%232E7D4F'/%3E%3Cpath d='M10.5 13.5a5.5 5.5 0 1 0 2-4.2' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M12.2 6.2v3.4h3.4' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light dark;
+    --desk: #D9DCE0; --window: #FFFFFF; --side: #EEEFF1; --bar: #F3F4F5;
+    --edge: #A9AEB5; --line: #D3D6DA; --text: #1D1F22; --dim: #6B7078;
+    --done: #2E7D4F; --error: #B3261E; --have: #B5BAC1;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --desk: #18191B; --window: #26282B; --side: #2D2F33; --bar: #2A2C30;
+      --edge: #4A4E54; --line: #3A3D42; --text: #E6E7E9; --dim: #A0A4AB;
+      --done: #6CC28F; --error: #F2867E; --have: #5A5F66;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--desk); color: var(--text); padding: 48px 16px; }
+  code, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  [hidden] { display: none !important; }
+
+  .window {
+    max-width: 780px; margin: 0 auto; background: var(--window);
+    border: 1px solid var(--edge); border-radius: 6px; overflow: hidden;
+    box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+  }
+  .titlebar {
+    text-align: center; font-size: 13px; font-weight: 600; color: var(--dim);
+    padding: 7px 12px; background: var(--bar); border-bottom: 1px solid var(--line);
+  }
+  .body { display: grid; grid-template-columns: 190px 1fr; min-height: 440px; }
+
+  .sidebar {
+    background: var(--side); border-right: 1px solid var(--line);
+    padding: 22px 0 16px; display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { display: flex; gap: 9px; padding: 5px 18px; color: var(--dim); }
+  .steps li .mark { width: 1em; text-align: center; flex: none; }
+  .steps li.current { color: var(--text); font-weight: 600; }
+  .steps li.done .mark { color: var(--done); }
+  .foot { padding: 0 18px; display: flex; flex-direction: column; gap: 10px; }
+  .help { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text); text-decoration: none; }
+  .help .q {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 22px; height: 22px; border-radius: 50%; font-size: 13px; font-weight: 700;
+    color: var(--window); background: var(--dim);
+  }
+  .help:hover .q { background: var(--text); }
+  .help:hover span:last-child { text-decoration: underline; }
+  .lang { font-size: 12px; color: var(--dim); }
+  .lang select { font: inherit; margin-left: 4px; }
+
+  .pane { padding: 24px 30px 28px; min-width: 0; }
+  .compact { display: none; margin: 0 0 12px; font-size: 12px; color: var(--dim); }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 14px; }
+  h1:focus { outline: none; }
+  .guide { margin: 4px 0 12px; font-size: 13px; }
+  .guide a { color: var(--done); }
+  h2.sub { font-size: 14px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin: 0 0 10px; }
+  ol.howto { margin: 0 0 12px; padding-left: 20px; }
+  ol.howto li { margin-bottom: 4px; }
+  .path { display: inline-block; margin-top: 3px; overflow-wrap: anywhere; }
+  .dim { color: var(--dim); }
+  .where { margin-top: 18px; }
+  .error { color: var(--error); margin: 12px 0; }
+  .error::before { content: "⚠ "; }
+  .ok { color: var(--done); margin: 12px 0 8px; }
+  .ok::before { content: "✓ "; }
+
+  fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 18px 0 10px; padding: 10px 14px 12px; }
+  legend { padding: 0 4px; color: var(--dim); font-size: 12px; }
+  .pickrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pane.dragging fieldset { border-color: var(--done); }
+
+  progress { width: 100%; height: 14px; margin: 14px 0 4px; }
+  .status { font-size: 12px; color: var(--dim); margin: 0; }
+
+  table.facts { border-collapse: collapse; margin: 6px 0 10px; }
+  table.facts th { white-space: nowrap; text-align: left; font-weight: 400; color: var(--dim); padding: 2px 18px 2px 0; vertical-align: top; }
+  table.facts td { padding: 2px 0; overflow-wrap: anywhere; }
+
+  .keyrow { display: flex; gap: 8px; align-items: center; margin: 4px 0 4px; }
+  .keyrow input { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; padding: 5px 7px; }
+  .count { font-size: 12px; color: var(--dim); margin: 0 0 10px; }
+  label.field { display: block; margin-top: 16px; }
+
+  .form { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 12px; align-items: baseline; margin: 6px 0; }
+  .form > label { color: var(--dim); }
+  .form input[type="tel"], .form input[type="text"], .form select { font: inherit; padding: 3px 5px; max-width: 100%; }
+  .form .hint { grid-column: 2; margin: -4px 0 4px; font-size: 12px; color: var(--dim); }
+  .form .hint.error, .form .hint.ok { margin: -4px 0 4px; }
+  fieldset.chat { margin: 14px 0; }
+  fieldset.chat legend { color: var(--text); font-size: 13px; font-weight: 600; }
+  .chat-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  details { margin: 4px 0 2px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--dim); }
+
+  .timeline { margin: 8px 0 2px; }
+  .bars { display: flex; align-items: flex-end; gap: 1px; height: 72px; border-bottom: 1px solid var(--edge); }
+  .bars > span { flex: 1; display: flex; flex-direction: column-reverse; min-width: 0; }
+  .bars i { display: block; }
+  .bars i.have { background: var(--have); }
+  .bars i.add { background: var(--done); }
+  .years { position: relative; height: 16px; font-size: 11px; color: var(--dim); }
+  .years span { position: absolute; top: 2px; }
+  .key { font-size: 12px; color: var(--dim); margin: 4px 0 10px; }
+  .key b { display: inline-block; width: 9px; height: 9px; margin: 0 4px 0 10px; vertical-align: -1px; }
+  .key b:first-child { margin-left: 0; }
+  .key b.have { background: var(--have); }
+  .key b.add { background: var(--done); }
+  ul.plain { margin: 0; padding: 0; list-style: none; }
+  ul.plain li { margin: 0 0 2px; }
+
+  h2 { font-size: 14px; font-weight: 600; margin: 24px 0 8px; }
+  ol.checklist { margin: 8px 0 12px; padding-left: 0; list-style: none; counter-reset: item; }
+  ol.checklist li { margin: 0 0 7px; display: flex; gap: 8px; align-items: baseline; }
+  ol.checklist li::before { counter-increment: item; content: counter(item) "."; min-width: 1.4em; color: var(--dim); }
+  ol.checklist input { margin: 0; flex: none; transform: translateY(1px); }
+  ol.checklist label { flex: 1; }
+  ol.checklist code { font-size: 12px; }
+  .warn { border: 1px solid var(--line); background: var(--side); padding: 8px 10px; border-radius: 4px; margin: 10px 0; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+
+  .buttons {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    background: var(--bar); border-top: 1px solid var(--line);
+  }
+  .buttons .spacer { flex: 1; }
+  .buttons button { min-width: 84px; }
+  button { font: inherit; }
+
+  @media (max-width: 640px) {
+    body { padding: 0; }
+    .window { border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
+    .body { grid-template-columns: 1fr; min-height: 0; }
+    .sidebar { border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 0; }
+    .steps { display: none; }
+    .foot { flex-direction: row; justify-content: space-between; align-items: center; }
+    .compact { display: block; }
+    .form { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    .form .hint { grid-column: 1; margin: 0 0 6px; }
+    .pane { padding: 18px 16px 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar" id="title"></div>
+  <div class="body">
+    <nav class="sidebar" id="sidebar">
+      <ol class="steps" id="steps"></ol>
+      <div class="foot">
+      <a class="help" id="report-link" href="/how-it-works"><span class="q" aria-hidden="true">?</span><span data-i18n="howItWorks"></span></a>
+      <label class="lang"><span data-i18n="language"></span>
+        <select id="lang">
+          <option value="tr">Türkçe</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      </div>
+    </nav>
+
+    <main class="pane" id="pane">
+      <p class="compact" id="compact"></p>
+      <div id="views">
+        <p class="dim" id="view-loading" data-i18n="loading"></p>
+
+        <section id="view-1" hidden>
+          <h1 tabindex="-1" data-i18n="s1.title"></h1>
+          <p data-i18n="s1.intro"></p>
+          <ol class="howto">
+            <li data-i18n="s1.how1"></li>
+            <li data-i18n="s1.how2"></li>
+            <li data-i18n="s1.how3"></li>
+            <li><span data-i18n="s1.how4"></span><br>
+              <code class="path">Android/media/com.whatsapp/WhatsApp/Databases/msgstore.db.crypt15</code></li>
+          </ol>
+          <p class="dim" data-i18n="s1.crypt14"></p>
+          <p class="guide"><a data-guide="key"></a></p>
+
+          <fieldset id="backup-pick">
+            <legend data-i18n="s1.legend"></legend>
+            <div class="pickrow">
+              <input type="file" id="backup-input" accept=".crypt15,.crypt14,.crypt12">
+            </div>
+          </fieldset>
+
+          <div id="backup-progress" hidden aria-live="polite">
+            <progress id="backup-meter" max="100" value="0"></progress>
+            <p class="status" id="backup-status"></p>
+          </div>
+
+          <p class="error" id="backup-error" role="alert" hidden></p>
+
+          <div id="backup-summary" hidden>
+            <p class="ok" data-i18n="s1.added"></p>
+            <table class="facts">
+              <tr><th data-i18n="s1.file"></th><td id="b-name"></td></tr>
+              <tr><th data-i18n="s1.size"></th><td id="b-size"></td></tr>
+              <tr><th data-i18n="s1.version"></th><td id="b-version"></td></tr>
+              <tr><th data-i18n="s1.check"></th><td id="b-check"></td></tr>
+            </table>
+            <button type="button" id="backup-replace" data-i18n="s1.replace"></button>
+          </div>
+
+          <p class="dim where"><span data-i18n="s1.copiedTo"></span><br><code id="workspace"></code></p>
+        </section>
+
+        <section id="view-2" hidden>
+          <h1 tabindex="-1" data-i18n="s2.title"></h1>
+          <p data-i18n="s2.intro"></p>
+
+          <form id="key-form" autocomplete="off">
+            <label class="field" for="key-input" data-i18n="s2.label"></label>
+            <div class="keyrow">
+              <input id="key-input" type="password" autocomplete="off" autocorrect="off"
+                     autocapitalize="off" spellcheck="false" aria-describedby="key-count">
+              <button type="button" id="key-toggle" aria-controls="key-input" data-i18n="s2.show"></button>
+            </div>
+            <p class="count" id="key-count"></p>
+            <p class="dim" data-i18n="s2.note"></p>
+            <button type="submit" id="key-submit" data-i18n="s2.submit"></button>
+          </form>
+
+          <div id="decrypt-progress" hidden aria-live="polite">
+            <progress></progress>
+            <p class="status" data-i18n="s2.working"></p>
+          </div>
+
+          <p class="error" id="key-error" role="alert" hidden></p>
+
+          <div id="decrypt-summary" hidden>
+            <p class="ok" data-i18n="s2.done"></p>
+            <table class="facts">
+              <tr><th data-i18n="s2.messages"></th><td id="d-messages"></td></tr>
+              <tr><th data-i18n="s2.chats"></th><td id="d-chats"></td></tr>
+              <tr><th data-i18n="s2.dbSize"></th><td id="d-size"></td></tr>
+            </table>
+            <button type="button" id="key-again" data-i18n="s2.again"></button>
+          </div>
+        </section>
+
+        <section id="view-3" hidden>
+          <h1 tabindex="-1" data-i18n="s3.title"></h1>
+          <p data-i18n="s3.intro"></p>
+          <p data-i18n="s3.askTitle"></p>
+          <ol class="howto">
+            <li data-i18n="s3.ask1"></li>
+            <li data-i18n="s3.ask2"></li>
+            <li data-i18n="s3.ask3"></li>
+          </ol>
+
+          <p class="guide"><a data-guide="export"></a></p>
+          <div id="exports"></div>
+
+          <fieldset id="export-pick">
+            <legend data-i18n="s3.legend"></legend>
+            <input type="file" id="export-input" accept=".txt,.zip,text/plain,application/zip" multiple>
+          </fieldset>
+          <div id="export-progress" hidden aria-live="polite">
+            <progress id="export-meter" max="100" value="0"></progress>
+            <p class="status" id="export-status"></p>
+          </div>
+          <p class="error" id="export-error" role="alert" hidden></p>
+        </section>
+
+        <section id="view-4" hidden>
+          <h1 tabindex="-1" data-i18n="s4.title"></h1>
+          <p data-i18n="s4.intro"></p>
+          <div id="preview-progress" hidden aria-live="polite">
+            <progress id="preview-meter" max="100"></progress>
+            <p class="status" data-i18n="s4.working"></p>
+          </div>
+          <p class="error" id="preview-error" role="alert" hidden></p>
+          <div id="preview"></div>
+          <p><button type="button" id="preview-again" data-i18n="s4.again"></button></p>
+        </section>
+
+        <section id="view-5" hidden>
+          <h1 tabindex="-1" data-i18n="s5.title"></h1>
+          <p data-i18n="s5.intro"></p>
+          <table class="facts" id="build-plan"></table>
+          <p id="build-start-row"><button type="button" id="build-start" data-i18n="s5.start"></button></p>
+          <div id="build-progress" hidden aria-live="polite">
+            <progress id="build-meter" max="100" value="0"></progress>
+            <p class="status" id="build-status"></p>
+          </div>
+          <p class="error" id="build-error" role="alert" hidden></p>
+          <div id="build-summary" hidden>
+            <p class="ok" data-i18n="s5.done"></p>
+            <table class="facts">
+              <tr><th data-i18n="s1.file"></th><td>msgstore.db.crypt15</td></tr>
+              <tr><th data-i18n="s1.size"></th><td id="n-size"></td></tr>
+              <tr><th data-i18n="s5.total"></th><td id="n-messages"></td></tr>
+              <tr><th data-i18n="s5.added"></th><td id="n-added"></td></tr>
+              <tr><th data-i18n="s1.check"></th><td data-i18n="s5.verified"></td></tr>
+            </table>
+            <div class="row">
+              <button type="button" id="download" data-i18n="s5.save"></button>
+              <button type="button" id="build-again" data-i18n="s5.again"></button>
+            </div>
+            <p class="dim"><span data-i18n="s5.alsoAt"></span><br><code id="n-path"></code></p>
+          </div>
+        </section>
+
+        <section id="view-6" hidden>
+          <h1 tabindex="-1" data-i18n="s6.title"></h1>
+          <p data-i18n="s6.intro"></p>
+          <p class="warn" data-i18n="s6.warning"></p>
+          <ol class="checklist" id="checklist"></ol>
+          <p class="guide"><a data-guide="restore"></a></p>
+
+          <h2 data-i18n="s6.filesTitle"></h2>
+          <div id="cleanup-before">
+            <p data-i18n="s6.filesBody"></p>
+            <p><button type="button" id="cleanup" data-i18n="s6.cleanup"></button></p>
+          </div>
+          <p class="ok" id="cleanup-done" hidden data-i18n="s6.cleaned"></p>
+          <p class="error" id="cleanup-error" role="alert" hidden></p>
+
+          <h2 data-i18n="s6.wipeTitle"></h2>
+          <p data-i18n="s6.wipeBody"></p>
+          <div class="row">
+            <label><input type="checkbox" id="wipe-confirm"> <span data-i18n="s6.wipeConfirm"></span></label>
+          </div>
+          <p><button type="button" id="wipe" data-i18n="s6.wipe" disabled></button></p>
+        </section>
+
+        <section id="view-finished" hidden>
+          <h1 data-i18n="finishedTitle"></h1>
+          <p data-i18n="finishedBody"></p>
+          <p class="dim"><span data-i18n="finishedFiles"></span><br><code id="finished-workspace"></code></p>
+        </section>
+
+        <section id="view-fatal" hidden>
+          <h1 data-i18n="fatalTitle"></h1>
+          <p id="fatal-text"></p>
+          <h2 class="sub" data-i18n="start.title"></h2>
+          <ol class="howto">
+            <li data-i18n="start.terminal"></li>
+            <li><span data-i18n="start.folder"></span><br><code>cd wa-rescue</code></li>
+            <li><span data-i18n="start.venv"></span>
+              <table class="facts">
+                <tr><th>macOS, Linux</th><td><code>source .venv/bin/activate</code></td></tr>
+                <tr><th>Windows</th><td><code>.venv\Scripts\Activate.ps1</code></td></tr>
+              </table></li>
+            <li><span data-i18n="start.run"></span><br><code>warescue ui</code></li>
+            <li data-i18n="start.browser"></li>
+          </ol>
+          <p class="dim" data-i18n="start.token"></p>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="buttons" id="buttons">
+    <button type="button" id="finish" data-i18n="quit"></button>
+    <span class="spacer"></span>
+    <button type="button" id="back" data-i18n="back"></button>
+    <button type="button" id="next" data-i18n="next"></button>
+  </div>
+</div>
+
+<script nonce="__CSP_NONCE__">
+"use strict";
+
+const STEP_COUNT = 6;
+const UNSUPPORTED = /\.crypt1[24]$/i;
+const GUIDE = {
+  key: { tr: "tr-anahtar", en: "en-key" },
+  export: { tr: "tr-disa-aktarma", en: "en-export-how" },
+  restore: { tr: "tr-geri-yukleme", en: "en-restore" },
+};
+
+const STRINGS = {
+  tr: {
+    title: "warescue: WhatsApp yedeği kurtarma",
+    language: "Dil",
+    howItWorks: "Nasıl çalışır?",
+    loading: "Bağlanıyor…",
+    stepOf: (n, name) => `Adım ${n}/${STEP_COUNT}: ${name}`,
+    steps: ["Yedek", "Anahtar", "Sohbetler", "Önizleme", "Yeni yedek", "Telefona yükleme"],
+    next: "Devam",
+    close: "Kapat",
+    back: "Geri",
+    quit: "Çık",
+    "s1.title": "Yedek dosyasını seçin",
+    "s1.intro": "Önce telefondaki WhatsApp yedeğini bu bilgisayara kopyalamanız gerekiyor.",
+    "s1.how1": "WhatsApp'ta Ayarlar › Sohbetler › Sohbet yedeği › Uçtan uca şifreli yedek'i açın.",
+    "s1.how2": "Parola yerine 64 basamaklı anahtarı seçin ve anahtarı bir yere yazın. Bir sonraki adımda lazım olacak.",
+    "s1.how3": "Yedekle'ye dokunun, bitmesini bekleyin.",
+    "s1.how4": "Şu dosyayı bilgisayara kopyalayın:",
+    "s1.crypt14": "Not: Dosyanın adı .crypt14 ile bitiyorsa uçtan uca şifreleme kapalıdır ve o dosya açılamaz. Yukarıdaki 1–3. maddeleri yapıp yeniden yedek alın.",
+    "s1.legend": "Yedek dosyası",
+    "s1.copying": (pct) => `Kopyalanıyor… %${pct}`,
+    "s1.checking": "Dosya kontrol ediliyor…",
+    "s1.added": "Yedek dosyası eklendi.",
+    "s1.file": "Dosya",
+    "s1.size": "Boyut",
+    "s1.version": "WhatsApp sürümü",
+    "s1.check": "Kontrol",
+    "s1.checkOk": "crypt15, sağlama toplamı doğru",
+    "s1.checkNoMd5": "crypt15, sağlama toplamı yok",
+    "s1.unknown": "bilinmiyor",
+    "s1.replace": "Başka dosya seç…",
+    "s1.copiedTo": "Dosya şu klasöre kopyalanır. Telefondaki asıl dosyaya dokunulmaz.",
+    "s2.title": "Anahtarı girin",
+    "s2.intro": "Yedeği alırken WhatsApp'ın gösterdiği 64 basamaklı anahtarı yazın. Boşluklar önemli değil.",
+    "s2.label": "Anahtar:",
+    "s2.show": "Göster",
+    "s2.hide": "Gizle",
+    "s2.count": (n) => `${n}/64 basamak`,
+    "s2.note": "Anahtar diske yazılmaz. Sadece bu oturum açıkken bellekte durur.",
+    "s2.submit": "Yedeği aç",
+    "s2.working": "Yedek açılıyor. Büyük yedeklerde bir dakika kadar sürebilir.",
+    "s2.done": "Yedek açıldı.",
+    "s2.messages": "Mesaj",
+    "s2.chats": "Sohbet",
+    "s2.dbSize": "Veritabanı",
+    "s2.again": "Anahtarı yeniden gir",
+    "s3.title": "Sohbet dışa aktarımlarını ekleyin",
+    "s3.intro": "Eksik mesajlar, karşı tarafın telefonundan alınan sohbet dışa aktarımından eklenir. Kurtarmak istediğiniz her sohbet için bir dosya ekleyin.",
+    "s3.askTitle": "Karşı taraftan şunu isteyin:",
+    "s3.ask1": "WhatsApp'ta sizinle olan sohbeti açsın.",
+    "s3.ask2": "Android'de ⋮ › Diğer › Sohbeti dışa aktar'a, iPhone'da sohbetin başlığına dokunup Sohbeti Dışa Aktar'a dokunsun.",
+    "s3.ask3": "Medya olmadan'ı seçsin ve oluşan dosyayı size göndersin (.txt, iPhone'da .zip).",
+    "s3.legend": "Dışa aktarım ekle",
+    "s3.copying": (pct) => `Kopyalanıyor… %${pct}`,
+    "s3.summary": (n, a, b) => `${n} mesaj, ${a} – ${b}`,
+    "s3.remove": "Kaldır",
+    "s3.me": "Hangisi sizsiniz?",
+    "s3.mePick": "Seçin…",
+    "s3.sender": (name, n) => `${name} (${n} mesaj)`,
+    "s3.meHint": "Dosyayı karşı taraf oluşturduğu için adınız, sizi rehberine nasıl kaydettiyse öyle görünür.",
+    "s3.phone": "Karşı tarafın numarası",
+    "s3.phoneHint": "En az son 7 hane yeterli, ör. 5551234567.",
+    "s3.found": (n, a, b) => `Yedekte bulundu: ${n} mesaj, ${a} – ${b}.`,
+    "s3.foundEmpty": "Yedekte bulundu, ama içinde hiç mesaj yok.",
+    "s3.gap": (a, b) => `En uzun boşluk: ${a} – ${b}.`,
+    "s3.since": "Şu tarihten itibaren ekle",
+    "s3.sinceSuggested": "Öneri: en uzun boşluğun başladığı gün. Boş bırakırsanız dışa aktarımdaki bütün eksik mesajlar eklenir.",
+    "s3.sinceEmpty": "Boş bırakırsanız dışa aktarımdaki bütün eksik mesajlar eklenir.",
+    "s3.advanced": "Gelişmiş",
+    "s3.tz": "Saat dilimi",
+    "s3.tzHint": "Dışa aktarımı yapan telefonun saat dilimi. Saatler birkaç saat kaymış görünürse bunu değiştirin.",
+    "s4.title": "Önizleme",
+    "s4.intro": "Henüz hiçbir şey yazılmadı. Her sohbete neyin ekleneceği aşağıda. Yanlış bir şey görürseniz geri dönüp ayarları değiştirin.",
+    "s4.working": "Hesaplanıyor…",
+    "s4.again": "Yeniden hesapla",
+    "s4.have": "yedekte olan",
+    "s4.add": "eklenecek",
+    "s4.monthTip": (m, have, add) => `${m}: yedekte ${have}, eklenecek ${add}`,
+    "s4.toInsert": "Eklenecek",
+    "s4.toInsertValue": (n, me, them) => `${n} mesaj (sizden ${me}, karşı taraftan ${them})`,
+    "s4.kinds": "İçerik",
+    "s4.gaps": "Doldurulan boşluklar",
+    "s4.gapLine": (a, b, n) => `${a} – ${b}: ${n} mesaj`,
+    "s4.skipped": "Eklenmeyecek",
+    "s4.mediaNote": "Fotoğraf, video ve ses dosyaları dışa aktarımda olmadığı için bunların yerine \"📎 Medya (yedekte yok)\" notu eklenir.",
+    "s4.start": "baştan",
+    "s4.end": "bugün",
+    kinds: { text: "metin", media_omitted: "medya notu", media: "dosya notu", contact: "kişi kartı",
+             location: "konum", poll: "anket", deleted: "silinmiş mesaj notu" },
+    skipped: {
+      already_in_db: "Yedekte zaten var (boşlukların dışındaki tarihler)",
+      duplicate_at_edge: "Boşluğun kenarında, yedekte zaten bulunan mesaj",
+      before_since: "Seçtiğiniz tarihten önce",
+      system: "WhatsApp'ın kendi bildirim satırları",
+      text: "Boş mesaj",
+      media_omitted: "Medya yer tutucusu",
+    },
+    "s5.title": "Yeni yedeği oluşturun",
+    "s5.intro": "Önizlemedeki mesajlar yedeğin bir kopyasına eklenecek ve kopya aynı anahtarla yeniden şifrelenecek. Asıl yedek dosyanız değişmez.",
+    "s5.chats": "Sohbet",
+    "s5.toAdd": "Eklenecek mesaj",
+    "s5.start": "Yeni yedeği oluştur",
+    "s5.merging": (i, n) => `Sohbetler ekleniyor (${i}/${n})…`,
+    "s5.encrypting": "Şifreleniyor ve kontrol ediliyor…",
+    "s5.done": "Yeni yedek hazır.",
+    "s5.total": "Toplam mesaj",
+    "s5.added": "Eklenen",
+    "s5.verified": "yeniden açılıp karşılaştırıldı, aynı",
+    "s5.save": "Bilgisayara kaydet…",
+    "s5.saving": "Kaydediliyor…",
+    "s5.again": "Yeniden oluştur",
+    "s5.alsoAt": "Dosya çalışma klasöründe de duruyor:",
+    "s6.title": "Telefona yükleyin",
+    "s6.intro": "Aşağıdakileri sırayla yapın. İşaretledikleriniz kaydedilir, sayfayı kapatsanız da kaybolmaz.",
+    "s6.warning": "WhatsApp'ı kaldırmak telefondaki Android/media/com.whatsapp klasörünü, yani yerel yedekleri ve fotoğrafları siler. İlk maddeyi atlamayın.",
+    checklist: {
+      media: "Telefondaki <code>Android/media/com.whatsapp/WhatsApp/Media</code> klasörünü bilgisayara kopyalayın.",
+      copy: "Yeni <code>msgstore.db.crypt15</code> dosyasını bilgisayara kaydedin (5. adım, Yeni yedek).",
+      uninstall: "WhatsApp'ı telefondan kaldırın.",
+      folder: "Telefonda <code>Android/media/com.whatsapp/WhatsApp/Databases</code> klasörünü oluşturun.",
+      put: "Yeni <code>msgstore.db.crypt15</code> dosyasını bu <code>Databases</code> klasörüne, <code>Media</code> klasörünü de bir üstteki <code>WhatsApp</code> klasörüne kopyalayın.",
+      install: "WhatsApp'ı yeniden yükleyin ve aynı numarayla doğrulayın.",
+      restore: "Yedeği geri yüklemek isteyip istemediğiniz sorulunca Geri yükle'ye dokunun.",
+      key: "Anahtar sorulunca aynı 64 basamaklı anahtarı girin.",
+      fresh: "Geri yükleme bitince Ayarlar › Sohbetler › Sohbet yedeği'nden hemen yeni bir yedek alın.",
+    },
+    "s6.filesTitle": "Bu bilgisayardaki dosyalar",
+    "s6.filesBody": "Çalışma klasöründe sohbetlerinizin şifresiz kopyaları duruyor: açılmış veritabanı ve dışa aktarımlar. Bunları okuyan herkes bütün mesajlarınızı görebilir. Telefonda geri yükleme çalıştıktan sonra silin. Şifreli yedek dosyaları kalır.",
+    "s6.cleanup": "Şifresiz dosyaları sil",
+    "s6.cleaned": "Şifresiz dosyalar silindi. Önceki adımlara artık dönülemez.",
+    "s6.wipeTitle": "Çalışma klasörünü tamamen silmek",
+    "s6.wipeBody": "Yeni yedek dosyası dahil her şey silinir ve warescue kapanır.",
+    "s6.wipeConfirm": "Yeni yedeği telefona koydum, geri yükleme çalıştı.",
+    "s6.wipe": "Hepsini sil ve çık",
+    finishedTitle: "warescue kapandı",
+    finishedBody: "Anahtar bellekten silindi. Bu sekmeyi kapatabilirsiniz.",
+    finishedFiles: "Çalışma klasöründeki dosyalar yerinde duruyor:",
+    fatalTitle: "Bağlantı yok",
+    "guide.key": "Ayrıntılı anlatım: 64 basamaklı anahtarla yedek alma",
+    "guide.export": "Karşı tarafa gönderebileceğiniz ayrıntılı anlatım: Sohbeti dışa aktarma",
+    "guide.restore": "Ayrıntılı anlatım: Yedeği telefona geri yükleme (klasörlerin oluşturulması dahil)",
+    "start.title": "warescue'yu başlatmak",
+    "start.terminal": "Terminali açın. macOS'ta Terminal, Windows'ta PowerShell kullanılır.",
+    "start.folder": "warescue'nun kurulu olduğu klasöre gidin.",
+    "start.venv": "Sanal ortamı etkinleştirin.",
+    "start.run": "Sihirbazı başlatın.",
+    "start.browser": "Tarayıcı kendiliğinden açılır. Açılmazsa terminalde yazan bağlantıyı kopyalayıp tarayıcının adres çubuğuna yapıştırın.",
+    "start.token": "Bağlantının sonundaki #t=… kısmı bu oturumun anahtarıdır. Adresi elle yazarsanız ya da bu kısmı silerseniz sayfa bağlanamaz. warescue kapandıysa yukarıdaki adımlarla yeniden başlatın.",
+    errors: {
+      no_token: "Bu sayfayı terminalde \"warescue ui\" komutunun açtığı bağlantıyla açın.",
+      bad_token: "Oturum geçersiz. Terminalde \"warescue ui\" komutunu yeniden çalıştırın.",
+      offline: "warescue'ya ulaşılamıyor. Terminalde hâlâ çalışıyor mu? Kapandıysa \"warescue ui\" ile yeniden başlatın.",
+      crypt14: ".crypt14 dosyaları açılamıyor, anahtarı telefonun içinde saklanıyor. Uçtan uca şifreli yedeği 64 basamaklı anahtarla açıp yeni yedek alın, sonra .crypt15 dosyasını seçin.",
+      not_crypt15: "Bu dosya bir WhatsApp crypt15 yedeği değil. Databases klasöründeki msgstore.db.crypt15 dosyasını seçin.",
+      too_large: "Dosya çok büyük. Doğru dosyayı seçtiğinizden emin olun.",
+      upload_incomplete: "Kopyalama yarıda kaldı. Dosyayı yeniden seçin.",
+      upload_failed: "Dosya kopyalanamadı. warescue hâlâ çalışıyor mu? Dosyayı yeniden seçin.",
+      busy: "Başka bir işlem sürüyor. Bitince yeniden deneyin.",
+      bad_key_format: "Anahtar 64 basamak olmalı, sadece 0–9 ve a–f içerebilir. Boşlukları saymadan kontrol edin.",
+      wrong_key: "Bu anahtar bu yedeğe ait değil. Bu yedeği alırken gösterilen anahtarı girdiğinizden emin olun. Anahtarı sonradan değiştirdiyseniz yeni yedek alıp 1. adıma (Yedek) dönün.",
+      not_sqlite: "Yedek açıldı ama içinden mesaj veritabanı çıkmadı. msgstore.db.crypt15 dosyasını seçtiğinizden emin olun.",
+      no_backup: "Önce yedek dosyasını seçin.",
+      step_locked: "Önce önceki adımı bitirin.",
+      no_database: "Önce 2. adımda (Anahtar) yedeği açın.",
+      not_export: "Bu dosya bir WhatsApp sohbet dışa aktarımı değil. Sohbeti dışa aktar ile oluşan .txt (ya da iPhone'da .zip) dosyasını seçin.",
+      bad_zip: "ZIP dosyasının içinde tek bir sohbet metni bulunamadı. Dışa aktarımı Medya olmadan yeniden yapın.",
+      bad_timezone: "Bu saat dilimi tanınmadı. Europe/Istanbul gibi bir ad yazın.",
+      me_not_sender: "Seçilen ad bu dışa aktarımda yok. Listeden kendi adınızı seçin.",
+      me_missing: "Hangisinin siz olduğunu seçin.",
+      phone_too_short: "Numaranın en az son 7 hanesini yazın.",
+      chat_not_found: "Yedekte bu numarayla bire bir sohbet yok. Numarayı kontrol edin. Son 10 hane yeterli.",
+      chat_ambiguous: "Bu numara birden fazla sohbete uyuyor. Numaranın daha fazla hanesini yazın.",
+      lid_chat: "Bu kişiyle yedekte yeni türden ikinci bir sohbet daha var ve içinde mesaj bulunuyor. Bu durum henüz desteklenmiyor. Geçmişin iki sohbete bölünmemesi için bu dışa aktarımı kaldırın.",
+      group_chat: "Bu dosyada ikiden fazla kişi var. Grup sohbetleri desteklenmiyor. Bu dışa aktarımı kaldırın.",
+      same_chat: "Bu dışa aktarım, listedeki başka bir dosyayla aynı sohbete ait. Her sohbet için tek dosya bırakın.",
+      nothing_to_insert: "Bu dışa aktarımdaki mesajların hepsi yedekte zaten var, eklenecek bir şey yok. Bu dosyayı kaldırın ya da tarihi değiştirin.",
+      no_room: "Bir boşluğa sığmayacak kadar çok mesaj aynı dakikaya düşüyor. Saat dilimini kontrol edin.",
+      no_key: "Anahtar artık bellekte değil. 2. adıma (Anahtar) dönüp anahtarı yeniden girin.",
+      no_build: "Önce yeni yedeği oluşturun.",
+      cleaned: "Şifresiz dosyalar silindiği için önceki adımlara dönülemez.",
+      save_failed: "Dosya kaydedilemedi. Çalışma klasöründeki dosyayı elle kopyalayabilirsiniz.",
+      generic: "Beklenmeyen bir hata oldu. Terminaldeki mesajlara bakıp yeniden deneyin.",
+    },
+  },
+  en: {
+    title: "warescue: WhatsApp backup recovery",
+    language: "Language",
+    howItWorks: "How it works",
+    loading: "Connecting…",
+    stepOf: (n, name) => `Step ${n}/${STEP_COUNT}: ${name}`,
+    steps: ["Backup", "Key", "Chats", "Preview", "New backup", "Restore on phone"],
+    next: "Continue",
+    close: "Close",
+    back: "Back",
+    quit: "Quit",
+    "s1.title": "Choose the backup file",
+    "s1.intro": "First, copy the WhatsApp backup from your phone to this computer.",
+    "s1.how1": "In WhatsApp, open Settings › Chats › Chat backup › End-to-end encrypted backup.",
+    "s1.how2": "Choose the 64-digit key instead of a password and write the key down. You need it in the next step.",
+    "s1.how3": "Tap Back up and wait for it to finish.",
+    "s1.how4": "Copy this file to the computer:",
+    "s1.crypt14": "Note: if the file name ends in .crypt14, end-to-end encryption is off and the file cannot be opened. Do items 1–3 above and back up again.",
+    "s1.legend": "Backup file",
+    "s1.copying": (pct) => `Copying… ${pct}%`,
+    "s1.checking": "Checking the file…",
+    "s1.added": "Backup file added.",
+    "s1.file": "File",
+    "s1.size": "Size",
+    "s1.version": "WhatsApp version",
+    "s1.check": "Check",
+    "s1.checkOk": "crypt15, checksum correct",
+    "s1.checkNoMd5": "crypt15, no checksum",
+    "s1.unknown": "unknown",
+    "s1.replace": "Choose another file…",
+    "s1.copiedTo": "The file is copied to this folder. The file on your phone is not touched.",
+    "s2.title": "Enter the key",
+    "s2.intro": "Type the 64-digit key WhatsApp showed when you made the backup. Spaces do not matter.",
+    "s2.label": "Key:",
+    "s2.show": "Show",
+    "s2.hide": "Hide",
+    "s2.count": (n) => `${n}/64 digits`,
+    "s2.note": "The key is never written to disk. It stays in memory only while this session is open.",
+    "s2.submit": "Open backup",
+    "s2.working": "Opening the backup. Large backups can take about a minute.",
+    "s2.done": "The backup is open.",
+    "s2.messages": "Messages",
+    "s2.chats": "Chats",
+    "s2.dbSize": "Database",
+    "s2.again": "Enter the key again",
+    "s3.title": "Add chat exports",
+    "s3.intro": "Missing messages are added from a chat export made on the other person's phone. Add one file for every chat you want to recover.",
+    "s3.askTitle": "Ask the other person to:",
+    "s3.ask1": "Open your chat in WhatsApp.",
+    "s3.ask2": "On Android, tap ⋮ › More › Export chat. On iPhone, tap the chat name and then Export Chat.",
+    "s3.ask3": "Choose Without media and send you the file (.txt, or .zip from an iPhone).",
+    "s3.legend": "Add an export",
+    "s3.copying": (pct) => `Copying… ${pct}%`,
+    "s3.summary": (n, a, b) => `${n} messages, ${a} – ${b}`,
+    "s3.remove": "Remove",
+    "s3.me": "Which one is you?",
+    "s3.mePick": "Choose…",
+    "s3.sender": (name, n) => `${name} (${n} messages)`,
+    "s3.meHint": "The other person made this file, so you appear under the name they saved you as.",
+    "s3.phone": "Their phone number",
+    "s3.phoneHint": "The last 7 digits are enough, e.g. 5551234567.",
+    "s3.found": (n, a, b) => `Found in the backup: ${n} messages, ${a} – ${b}.`,
+    "s3.foundEmpty": "Found in the backup, but it has no messages.",
+    "s3.gap": (a, b) => `Longest gap: ${a} – ${b}.`,
+    "s3.since": "Only add messages from",
+    "s3.sinceSuggested": "Suggested: the day the longest gap starts. Leave it empty to add every missing message in the export.",
+    "s3.sinceEmpty": "Leave it empty to add every missing message in the export.",
+    "s3.advanced": "Advanced",
+    "s3.tz": "Time zone",
+    "s3.tzHint": "Time zone of the phone that made the export. Change it if times look off by a few hours.",
+    "s4.title": "Preview",
+    "s4.intro": "Nothing has been written yet. Below is what each chat will get. If something looks wrong, go back and change the settings.",
+    "s4.working": "Working it out…",
+    "s4.again": "Recalculate",
+    "s4.have": "in the backup",
+    "s4.add": "to be added",
+    "s4.monthTip": (m, have, add) => `${m}: ${have} in the backup, ${add} to be added`,
+    "s4.toInsert": "To be added",
+    "s4.toInsertValue": (n, me, them) => `${n} messages (${me} from you, ${them} from them)`,
+    "s4.kinds": "Content",
+    "s4.gaps": "Gaps filled",
+    "s4.gapLine": (a, b, n) => `${a} – ${b}: ${n} messages`,
+    "s4.skipped": "Not added",
+    "s4.mediaNote": "Photos, videos and voice notes are not in the export, so a \"📎 Medya (yedekte yok)\" note is added in their place.",
+    "s4.start": "the beginning",
+    "s4.end": "today",
+    kinds: { text: "text", media_omitted: "media note", media: "file note", contact: "contact card",
+             location: "location", poll: "poll", deleted: "deleted-message note" },
+    skipped: {
+      already_in_db: "Already in the backup (dates outside the gaps)",
+      duplicate_at_edge: "At the edge of a gap and already in the backup",
+      before_since: "Before the date you chose",
+      system: "WhatsApp's own notice lines",
+      text: "Empty message",
+      media_omitted: "Media placeholder",
+    },
+    "s5.title": "Build the new backup",
+    "s5.intro": "The messages from the preview are added to a copy of your backup, and the copy is encrypted again with the same key. Your original backup file is not changed.",
+    "s5.chats": "Chats",
+    "s5.toAdd": "Messages to add",
+    "s5.start": "Build new backup",
+    "s5.merging": (i, n) => `Adding chats (${i}/${n})…`,
+    "s5.encrypting": "Encrypting and checking…",
+    "s5.done": "The new backup is ready.",
+    "s5.total": "Total messages",
+    "s5.added": "Added",
+    "s5.verified": "opened again and compared, identical",
+    "s5.save": "Save to this computer…",
+    "s5.saving": "Saving…",
+    "s5.again": "Build again",
+    "s5.alsoAt": "The file is also in the workspace folder:",
+    "s6.title": "Restore on the phone",
+    "s6.intro": "Do these in order. What you tick is saved, even if you close the page.",
+    "s6.warning": "Uninstalling WhatsApp deletes the Android/media/com.whatsapp folder on the phone, which holds local backups and photos. Do not skip the first item.",
+    checklist: {
+      media: "Copy the phone's <code>Android/media/com.whatsapp/WhatsApp/Media</code> folder to the computer.",
+      copy: "Save the new <code>msgstore.db.crypt15</code> to the computer (step 5, New backup).",
+      uninstall: "Uninstall WhatsApp from the phone.",
+      folder: "On the phone, create the folder <code>Android/media/com.whatsapp/WhatsApp/Databases</code>.",
+      put: "Copy the new <code>msgstore.db.crypt15</code> into that <code>Databases</code> folder, and the <code>Media</code> folder into the <code>WhatsApp</code> folder above it.",
+      install: "Install WhatsApp again and verify the same number.",
+      restore: "When asked whether to restore a backup, tap Restore.",
+      key: "When asked for the key, enter the same 64-digit key.",
+      fresh: "When the restore is done, take a new backup right away in Settings › Chats › Chat backup.",
+    },
+    "s6.filesTitle": "Files on this computer",
+    "s6.filesBody": "The workspace folder holds unencrypted copies of your chats: the opened database and the exports. Anyone who reads them can see all your messages. Delete them once the restore has worked on the phone. The encrypted backups stay.",
+    "s6.cleanup": "Delete unencrypted files",
+    "s6.cleaned": "The unencrypted files were deleted. The earlier steps can no longer be opened.",
+    "s6.wipeTitle": "Deleting the whole workspace",
+    "s6.wipeBody": "Everything is deleted, the new backup included, and warescue stops.",
+    "s6.wipeConfirm": "I put the new backup on the phone and the restore worked.",
+    "s6.wipe": "Delete everything and quit",
+    finishedTitle: "warescue has stopped",
+    finishedBody: "The key was wiped from memory. You can close this tab.",
+    finishedFiles: "Files in the workspace folder are still there:",
+    fatalTitle: "Not connected",
+    "guide.key": "Step-by-step guide: Backing up with a 64-digit key",
+    "guide.export": "A guide you can send to the other person: Exporting a chat",
+    "guide.restore": "Step-by-step guide: Restoring the backup on the phone (including creating the folders)",
+    "start.title": "Starting warescue",
+    "start.terminal": "Open a terminal. Use Terminal on macOS and PowerShell on Windows.",
+    "start.folder": "Go to the folder where warescue is installed.",
+    "start.venv": "Activate the virtual environment.",
+    "start.run": "Start the wizard.",
+    "start.browser": "The browser opens on its own. If it does not, copy the link shown in the terminal and paste it into the browser's address bar.",
+    "start.token": "The #t=… part at the end of the link is this session's key. If you type the address by hand or remove that part, the page cannot connect. If warescue has stopped, start it again with the steps above.",
+    errors: {
+      no_token: "Open this page with the link that \"warescue ui\" opened from your terminal.",
+      bad_token: "This session is not valid. Run \"warescue ui\" in your terminal again.",
+      offline: "warescue cannot be reached. Is it still running in your terminal? If it stopped, start it again with \"warescue ui\".",
+      crypt14: ".crypt14 files cannot be opened because their key is stored inside the phone. Turn on the end-to-end encrypted backup with a 64-digit key, back up again, then choose the .crypt15 file.",
+      not_crypt15: "This file is not a WhatsApp crypt15 backup. Choose msgstore.db.crypt15 from the Databases folder.",
+      too_large: "The file is too large. Make sure you chose the right one.",
+      upload_incomplete: "Copying stopped halfway. Choose the file again.",
+      upload_failed: "The file could not be copied. Is warescue still running? Choose the file again.",
+      busy: "Another operation is still running. Try again when it is done.",
+      bad_key_format: "The key must be 64 digits using only 0–9 and a–f. Check it again, ignoring spaces.",
+      wrong_key: "This key does not belong to this backup. Make sure you entered the key shown when this backup was made. If you changed the key since, back up again and return to step 1 (Backup).",
+      not_sqlite: "The backup opened, but there was no message database inside. Make sure you chose msgstore.db.crypt15.",
+      no_backup: "Choose the backup file first.",
+      step_locked: "Finish the previous step first.",
+      no_database: "Open the backup in step 2 (Key) first.",
+      not_export: "This file is not a WhatsApp chat export. Choose the .txt (or iPhone .zip) file made with Export chat.",
+      bad_zip: "The zip file does not hold exactly one chat text. Export the chat again, Without media.",
+      bad_timezone: "That time zone is not known. Type a name like Europe/Istanbul.",
+      me_not_sender: "That name is not in this export. Choose your own name from the list.",
+      me_missing: "Choose which one is you.",
+      phone_too_short: "Type at least the last 7 digits of the number.",
+      chat_not_found: "The backup has no one-to-one chat with this number. Check the number. The last 10 digits are enough.",
+      chat_ambiguous: "This number matches more than one chat. Type more of its digits.",
+      lid_chat: "The backup has a second, newer-style chat with this person that holds messages. That is not supported yet. Remove this export so the history is not split across two chats.",
+      group_chat: "This file has more than two people in it. Group chats are not supported. Remove this export.",
+      same_chat: "This export belongs to the same chat as another file in the list. Keep one file per chat.",
+      nothing_to_insert: "Every message in this export is already in the backup, so there is nothing to add. Remove the file or change the date.",
+      no_room: "Too many messages fall into the same minute to fit into a gap. Check the time zone.",
+      no_key: "The key is no longer in memory. Go back to step 2 (Key) and enter it again.",
+      no_build: "Build the new backup first.",
+      cleaned: "The unencrypted files were deleted, so the earlier steps cannot be opened.",
+      save_failed: "The file could not be saved. You can copy it from the workspace folder by hand.",
+      generic: "Something unexpected went wrong. Check the messages in your terminal and try again.",
+    },
+  },
+};
+
+const $ = (id) => document.getElementById(id);
+const safeStorage = {
+  get(area, name) { try { return area.getItem(name); } catch { return null; } },
+  set(area, name, value) { try { area.setItem(name, value); } catch {} },
+};
+
+const browserLang = (navigator.languages?.[0] ?? navigator.language ?? "").toLowerCase().startsWith("tr") ? "tr" : "en";
+let lang = { tr: "tr", en: "en" }[safeStorage.get(localStorage, "warescue.lang")] ?? browserLang;
+const t = (key, ...args) => {
+  const value = STRINGS[lang][key];
+  return typeof value === "function" ? value(...args) : value ?? key;
+};
+const errorText = (code) => STRINGS[lang].errors[code] ?? STRINGS[lang].errors.generic;
+const locale = () => (lang === "tr" ? "tr-TR" : "en-GB");
+const number = (n) => new Intl.NumberFormat(locale()).format(n);
+const fileSize = (bytes) => {
+  const [value, unit] = bytes < 1048576 ? [bytes / 1024, "KB"] : [bytes / 1048576, "MB"];
+  return `${new Intl.NumberFormat(locale(), { maximumFractionDigits: 1 }).format(value)} ${unit}`;
+};
+// The server sends local times already in the chat's time zone, so they are
+// shown as they are, without converting to the browser's zone.
+function formatLocal(iso, withTime = true) {
+  if (!iso) return "";
+  const [day, time] = iso.split("T");
+  const [y, m, d] = day.split("-");
+  const shown = lang === "tr" ? `${d}.${m}.${y}` : day;
+  return withTime && time ? `${shown} ${time}` : shown;
+}
+const element = (tag, props = {}, ...children) => {
+  const el = Object.assign(document.createElement(tag), props);
+  el.append(...children);
+  return el;
+};
+const hexDigits = (text) => text.replace(/[\s-]/g, "").length;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The token comes in the URL fragment, which browsers never send to a server.
+// It is kept in sessionStorage for this tab only, so a reload keeps working.
+function readToken() {
+  const match = location.hash.match(/(?:^#|&)t=([A-Za-z0-9_-]+)/);
+  if (match) {
+    safeStorage.set(sessionStorage, "warescue.token", match[1]);
+    history.replaceState(null, "", location.pathname);
+  }
+  return safeStorage.get(sessionStorage, "warescue.token") || match?.[1] || null;
+}
+const token = readToken();
+
+class ApiError extends Error {
+  constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+}
+
+async function api(method, path, body) {
+  let response;
+  try {
+    response = await fetch(path, {
+      method,
+      headers: { "X-Warescue-Token": token, ...(body ? { "Content-Type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "offline", "network error");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new ApiError(response.status, data.error ?? "generic", data.message ?? "");
+  return data;
+}
+
+function uploadFile(path, file, onProgress, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", path);
+    xhr.setRequestHeader("X-Warescue-Token", token);
+    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.addEventListener("progress", (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); });
+    xhr.addEventListener("load", () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new ApiError(xhr.status, data.error ?? "upload_failed", data.message ?? ""));
+    });
+    xhr.addEventListener("error", () => reject(new ApiError(0, "upload_failed", "network error")));
+    xhr.send(file);
+  });
+}
+
+async function waitForJob(id) {
+  for (;;) {
+    const job = await api("GET", `/api/job/${id}`);
+    if (job.state === "done" || job.state === "failed") return job;
+    await sleep(500);
+  }
+}
+
+const view = { session: null, step: 1, busy: false, closed: false };
+const maxStep = () => view.session?.max_step ?? 1;
+
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  document.title = "warescue";
+  $("title").textContent = t("title");
+  $("lang").value = lang;
+  for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll(".error[data-code], #fatal-text[data-code]")) el.textContent = errorText(el.dataset.code);
+  for (const el of document.querySelectorAll("a[data-guide]")) {
+    el.href = `/how-it-works#${GUIDE[el.dataset.guide][lang]}`;
+    el.textContent = t(`guide.${el.dataset.guide}`);
+  }
+  render();
+}
+
+function renderSteps() {
+  const list = $("steps");
+  list.replaceChildren();
+  STRINGS[lang].steps.forEach((name, i) => {
+    const n = i + 1;
+    const li = document.createElement("li");
+    const mark = document.createElement("span");
+    mark.className = "mark";
+    if (n === view.step) { li.className = "current"; li.setAttribute("aria-current", "step"); mark.textContent = "●"; }
+    else if (n < maxStep()) { li.className = "done"; mark.textContent = "✓"; }
+    else mark.textContent = "○";
+    li.append(mark, document.createTextNode(name));
+    list.append(li);
+  });
+  $("compact").textContent = t("stepOf", view.step, STRINGS[lang].steps[view.step - 1]);
+}
+
+function showView(id) {
+  for (const el of $("views").children) el.hidden = el.id !== id;
+}
+
+function showError(id, code) {
+  const box = $(id);
+  if (!code) { box.hidden = true; delete box.dataset.code; return; }
+  box.dataset.code = code;
+  box.textContent = errorText(code);
+  box.hidden = false;
+}
+
+function renderStep() {
+  const state = view.session.state;
+  let canContinue = false;
+  if (view.step === 1) {
+    const backup = state.backup;
+    $("backup-summary").hidden = !backup || view.busy;
+    $("backup-pick").hidden = Boolean(backup) || view.busy;
+    if (backup) {
+      $("b-name").textContent = backup.name;
+      $("b-size").textContent = fileSize(backup.size);
+      $("b-version").textContent = backup.app_version ?? t("s1.unknown");
+      $("b-check").textContent = t(backup.md5_verified ? "s1.checkOk" : "s1.checkNoMd5");
+    }
+    canContinue = Boolean(backup);
+    showView("view-1");
+  } else if (view.step === 2) {
+    const db = state.database;
+    $("key-form").hidden = Boolean(db) || view.busy;
+    $("decrypt-progress").hidden = !view.busy;
+    $("decrypt-summary").hidden = !db || view.busy;
+    if (db) {
+      $("d-messages").textContent = number(db.messages);
+      $("d-chats").textContent = number(db.chats);
+      $("d-size").textContent = fileSize(db.size);
+    }
+    canContinue = Boolean(db);
+    showView("view-2");
+  } else if (view.step === 3) {
+    renderExports();
+    $("export-pick").hidden = view.busy;
+    canContinue = maxStep() >= 4;
+    showView("view-3");
+  } else if (view.step === 4) {
+    renderPreview();
+    canContinue = maxStep() >= 5;
+    showView("view-4");
+  } else if (view.step === 5) {
+    renderBuild();
+    canContinue = maxStep() >= 6;
+    showView("view-5");
+  } else {
+    renderRestore();
+    showView("view-6");
+  }
+  const last = view.step === STEP_COUNT;
+  $("back").disabled = view.busy || view.step === 1 || Boolean(state.cleaned);
+  $("next").dataset.i18n = last ? "close" : "next";
+  $("next").textContent = t($("next").dataset.i18n);
+  $("next").disabled = view.busy || !(canContinue || last);
+  $("finish").hidden = last;
+}
+
+function render() {
+  if (!view.session || view.closed) return;
+  renderSteps();
+  renderStep();
+}
+
+async function refresh() {
+  view.session = await api("GET", "/api/session");
+}
+
+async function goTo(step) {
+  if (step < 1 || step > maxStep() || view.busy) return;
+  try {
+    await api("POST", "/api/step", { step });
+    view.step = step;
+    await refresh();
+    render();
+    $("views").querySelector("section:not([hidden]) h1")?.focus();
+    if (step === 4 && !view.session.state.preview) startPreview();
+    if (step === 5 && !view.session.state.build) $("build-start").focus();
+  } catch (err) {
+    handleFatal(err);
+  }
+}
+
+function closeWindow(viewId) {
+  view.closed = true;
+  showView(viewId);
+  $("buttons").hidden = true;
+  $("steps").replaceChildren();
+  $("compact").textContent = "";
+}
+
+function handleFatal(err) {
+  const code = err instanceof ApiError ? err.code : "generic";
+  if (code === "bad_token" || code === "offline" || code === "no_token") {
+    $("fatal-text").dataset.code = code;
+    $("fatal-text").textContent = errorText(code);
+    closeWindow("view-fatal");
+    return true;
+  }
+  return false;
+}
+
+async function addBackup(file) {
+  if (!file || view.busy) return;
+  showError("backup-error", null);
+  if (UNSUPPORTED.test(file.name)) { showError("backup-error", "crypt14"); $("backup-input").value = ""; return; }
+
+  view.busy = true;
+  $("backup-progress").hidden = false;
+  render();
+  const meter = $("backup-meter");
+  const status = $("backup-status");
+  meter.value = 0;
+  status.textContent = t("s1.copying", 0);
+  try {
+    await uploadFile("/api/backup", file, (fraction) => {
+      const pct = Math.floor(fraction * 100);
+      meter.value = pct;
+      status.textContent = pct < 100 ? t("s1.copying", pct) : t("s1.checking");
+    });
+    await refresh();
+  } catch (err) {
+    if (!handleFatal(err)) showError("backup-error", err.code);
+  } finally {
+    view.busy = false;
+    $("backup-progress").hidden = true;
+    $("backup-input").value = "";
+    render();
+  }
+}
+
+$("backup-input").addEventListener("change", (e) => addBackup(e.target.files[0]));
+$("backup-replace").addEventListener("click", () => $("backup-input").click());
+
+const pane = $("pane");
+pane.addEventListener("dragover", (e) => {
+  if (view.step !== 1 || view.busy) return;
+  e.preventDefault();
+  pane.classList.add("dragging");
+});
+pane.addEventListener("dragleave", () => pane.classList.remove("dragging"));
+pane.addEventListener("drop", (e) => {
+  if (view.step !== 1) return;
+  e.preventDefault();
+  pane.classList.remove("dragging");
+  addBackup(e.dataTransfer.files[0]);
+});
+
+const keyInput = $("key-input");
+
+function updateKeyCount() {
+  $("key-count").textContent = t("s2.count", hexDigits(keyInput.value));
+}
+keyInput.addEventListener("input", updateKeyCount);
+
+$("key-toggle").addEventListener("click", () => {
+  const show = keyInput.type === "password";
+  keyInput.type = show ? "text" : "password";
+  $("key-toggle").dataset.i18n = show ? "s2.hide" : "s2.show";
+  $("key-toggle").textContent = t($("key-toggle").dataset.i18n);
+});
+
+async function followDecrypt(jobId) {
+  view.busy = true;
+  render();
+  try {
+    const job = await waitForJob(jobId);
+    if (job.state === "failed") showError("key-error", job.error_code);
+    else keyInput.value = "";
+    await refresh();
+  } catch (err) {
+    if (!handleFatal(err)) showError("key-error", err.code);
+  } finally {
+    view.busy = false;
+    updateKeyCount();
+    render();
+  }
+}
+
+$("key-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showError("key-error", null);
+  if (hexDigits(keyInput.value) !== 64) { showError("key-error", "bad_key_format"); return; }
+  try {
+    const { job } = await api("POST", "/api/key", { key: keyInput.value });
+    await followDecrypt(job);
+  } catch (err) {
+    if (!handleFatal(err)) showError("key-error", err.code);
+  }
+});
+
+$("key-again").addEventListener("click", () => {
+  $("decrypt-summary").hidden = true;
+  $("key-form").hidden = false;
+  keyInput.focus();
+});
+
+// Each export's form is built once and then only updated, so typing never loses focus.
+const exportViews = new Map();
+
+function exportsState() { return view.session?.state.exports ?? []; }
+
+function buildExportView(exp) {
+  const ids = (name) => `exp-${exp.id}-${name}`;
+  const me = element("select", { id: ids("me") });
+  const phone = element("input", { id: ids("phone"), type: "tel", autocomplete: "off", inputMode: "tel" });
+  const since = element("input", { id: ids("since"), type: "date" });
+  const tz = element("input", { id: ids("tz"), type: "text", autocomplete: "off", spellcheck: false });
+  const remove = element("button", { type: "button" });
+  const parts = {
+    root: element("fieldset", { className: "chat" }),
+    legend: element("legend"),
+    summary: element("span", { className: "dim" }),
+    group: element("p", { className: "error", hidden: true }),
+    me, phone, since, tz, remove,
+    meLabel: element("label", { htmlFor: me.id }),
+    meHint: element("p", { className: "hint" }),
+    phoneLabel: element("label", { htmlFor: phone.id }),
+    phoneHint: element("p", { className: "hint" }),
+    sinceLabel: element("label", { htmlFor: since.id }),
+    sinceHint: element("p", { className: "hint" }),
+    details: element("details"),
+    tzSummary: element("summary"),
+    tzLabel: element("label", { htmlFor: tz.id }),
+    tzHint: element("p", { className: "hint" }),
+  };
+  const advanced = element("div", { className: "form" }, parts.tzLabel, tz, parts.tzHint);
+  parts.details.append(parts.tzSummary, advanced);
+  parts.root.append(
+    parts.legend,
+    element("div", { className: "chat-head" }, parts.summary, remove),
+    parts.group,
+    element("div", { className: "form" },
+      parts.meLabel, me, parts.meHint,
+      parts.phoneLabel, phone, parts.phoneHint,
+      parts.sinceLabel, since, parts.sinceHint),
+    parts.details,
+  );
+
+  me.addEventListener("change", () => saveExport(exp.id, { me: me.value || null }));
+  phone.addEventListener("change", () => saveExport(exp.id, { phone: phone.value }));
+  since.addEventListener("change", () => saveExport(exp.id, { since: since.value || null }));
+  tz.addEventListener("change", () => saveExport(exp.id, { tz: tz.value.trim() }));
+  remove.addEventListener("click", () => removeExport(exp.id));
+  return parts;
+}
+
+function setHint(el, text, kind = "") {
+  el.textContent = text;
+  el.className = `hint ${kind}`.trim();
+}
+
+function updateExportView(parts, exp) {
+  const keep = (input, value) => { if (document.activeElement !== input) input.value = value ?? ""; };
+  parts.legend.textContent = exp.name;
+  parts.summary.textContent = t("s3.summary", number(exp.total), formatLocal(exp.first, false), formatLocal(exp.last, false));
+  parts.remove.textContent = t("s3.remove");
+  parts.group.hidden = !exp.group;
+  parts.group.textContent = errorText("group_chat");
+
+  parts.meLabel.textContent = t("s3.me");
+  parts.me.replaceChildren(
+    element("option", { value: "", textContent: t("s3.mePick") }),
+    ...exp.senders.map((sender) => element("option", { value: sender.name, textContent: t("s3.sender", sender.name, number(sender.count)) })),
+  );
+  parts.me.value = exp.me ?? "";
+  setHint(parts.meHint, t("s3.meHint"));
+
+  parts.phoneLabel.textContent = t("s3.phone");
+  keep(parts.phone, exp.phone);
+  if (exp.chat_error) setHint(parts.phoneHint, errorText(exp.chat_error), "error");
+  else if (exp.chat) {
+    const c = exp.chat;
+    let text = c.messages ? t("s3.found", number(c.messages), formatLocal(c.first, false), formatLocal(c.last, false))
+                          : t("s3.foundEmpty");
+    if (c.gap_start) text += " " + t("s3.gap", formatLocal(c.gap_start, false), c.gap_end ? formatLocal(c.gap_end, false) : t("s4.end"));
+    setHint(parts.phoneHint, text, "ok");
+  } else setHint(parts.phoneHint, t("s3.phoneHint"));
+
+  parts.sinceLabel.textContent = t("s3.since");
+  keep(parts.since, exp.since);
+  setHint(parts.sinceHint, exp.since_auto && exp.suggested_since ? t("s3.sinceSuggested") : t("s3.sinceEmpty"));
+
+  parts.tzSummary.textContent = t("s3.advanced");
+  parts.tzLabel.textContent = t("s3.tz");
+  keep(parts.tz, exp.tz);
+  setHint(parts.tzHint, t("s3.tzHint"));
+
+  for (const input of [parts.me, parts.phone, parts.since, parts.tz, parts.remove]) input.disabled = view.busy;
+}
+
+function renderExports() {
+  const list = $("exports");
+  const current = exportsState();
+  for (const id of [...exportViews.keys()]) {
+    if (!current.some((exp) => exp.id === id)) { exportViews.get(id).root.remove(); exportViews.delete(id); }
+  }
+  for (const exp of current) {
+    if (!exportViews.has(exp.id)) exportViews.set(exp.id, buildExportView(exp));
+    const parts = exportViews.get(exp.id);
+    updateExportView(parts, exp);
+    list.append(parts.root);
+  }
+}
+
+async function saveExport(id, patch) {
+  showError("export-error", null);
+  try {
+    await api("POST", `/api/exports/${id}`, patch);
+    await refresh();
+  } catch (err) {
+    if (!handleFatal(err)) showError("export-error", err.code);
+    await refresh().catch(() => {});
+  }
+  render();
+}
+
+async function removeExport(id) {
+  showError("export-error", null);
+  try {
+    await api("POST", `/api/exports/${id}/delete`);
+    await refresh();
+  } catch (err) {
+    if (!handleFatal(err)) showError("export-error", err.code);
+  }
+  render();
+}
+
+async function addExports(files) {
+  if (!files.length || view.busy) return;
+  showError("export-error", null);
+  view.busy = true;
+  $("export-progress").hidden = false;
+  render();
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Istanbul";
+  try {
+    for (const file of files) {
+      $("export-meter").value = 0;
+      $("export-status").textContent = `${file.name}: ${t("s3.copying", 0)}`;
+      await uploadFile("/api/exports", file, (fraction) => {
+        const pct = Math.floor(fraction * 100);
+        $("export-meter").value = pct;
+        $("export-status").textContent = `${file.name}: ${t("s3.copying", pct)}`;
+      }, { "X-Timezone": zone });
+    }
+  } catch (err) {
+    if (!handleFatal(err)) showError("export-error", err.code);
+  } finally {
+    view.busy = false;
+    $("export-progress").hidden = true;
+    $("export-input").value = "";
+    await refresh().catch(() => {});
+    render();
+  }
+}
+
+$("export-input").addEventListener("change", (e) => addExports([...e.target.files]));
+
+function timeline(rows) {
+  const peak = Math.max(1, ...rows.map(([, have, add]) => have + add));
+  const bars = element("div", { className: "bars" });
+  bars.setAttribute("role", "img");
+  const years = element("div", { className: "years" });
+  const height = (n) => (n ? `${Math.max(1, Math.round((n / peak) * 72))}px` : "0");
+  rows.forEach(([month, have, add], i) => {
+    bars.append(element("span", { title: t("s4.monthTip", month, number(have), number(add)) },
+      element("i", { className: "have", style: `height:${height(have)}` }),
+      element("i", { className: "add", style: `height:${height(add)}` })));
+    if (month.endsWith("-01") || i === 0) {
+      const label = element("span", { textContent: month.slice(0, 4) });
+      label.style.left = `${(i / rows.length) * 100}%`;
+      if (i === 0 || i / rows.length < 0.97) years.append(label);
+    }
+  });
+  const added = rows.reduce((sum, [, , add]) => sum + add, 0);
+  const kept = rows.reduce((sum, [, have]) => sum + have, 0);
+  bars.setAttribute("aria-label", `${t("s4.have")}: ${number(kept)}, ${t("s4.add")}: ${number(added)}`);
+  const key = element("p", { className: "key" },
+    element("b", { className: "have" }), t("s4.have"), element("b", { className: "add" }), t("s4.add"));
+  return element("div", { className: "timeline" }, bars, years, key);
+}
+
+function factRow(label, ...content) {
+  return element("tr", {}, element("th", { textContent: label }), element("td", {}, ...content));
+}
+
+function previewChat(chat) {
+  const legend = element("legend", { textContent: chat.phone ? `${chat.name} · ${chat.phone}` : chat.name });
+  const box = element("fieldset", { className: "chat" }, legend);
+  if (chat.error) box.append(element("p", { className: "error", textContent: errorText(chat.error) }));
+  if (chat.to_insert === undefined) return box;
+
+  if (chat.timeline.length) box.append(timeline(chat.timeline));
+  const kinds = Object.entries(chat.kinds)
+    .map(([kind, n]) => `${STRINGS[lang].kinds[kind] ?? kind} ${number(n)}`).join(", ");
+  const gaps = element("ul", { className: "plain" }, ...chat.gaps.map((g) => element("li", {
+    textContent: t("s4.gapLine", g.start ? formatLocal(g.start) : t("s4.start"), g.end ? formatLocal(g.end) : t("s4.end"), number(g.inserted)),
+  })));
+  const skipped = element("ul", { className: "plain" }, ...Object.entries(chat.skipped).map(([why, n]) =>
+    element("li", { textContent: `${number(n)}: ${STRINGS[lang].skipped[why] ?? why}` })));
+  const table = element("table", { className: "facts" },
+    factRow(t("s4.toInsert"), t("s4.toInsertValue", number(chat.to_insert), number(chat.from_me), number(chat.from_them))));
+  if (kinds) table.append(factRow(t("s4.kinds"), kinds));
+  if (chat.gaps.length) table.append(factRow(t("s4.gaps"), gaps));
+  if (Object.keys(chat.skipped).length) table.append(factRow(t("s4.skipped"), skipped));
+  box.append(table);
+  if (chat.kinds.media_omitted || chat.kinds.media) box.append(element("p", { className: "dim", textContent: t("s4.mediaNote") }));
+  return box;
+}
+
+function renderPreview() {
+  const preview = view.session.state.preview;
+  $("preview-progress").hidden = !view.busy;
+  $("preview-again").disabled = view.busy;
+  $("preview").replaceChildren(...(preview && !view.busy ? preview.chats.map(previewChat) : []));
+}
+
+async function followPreview(jobId) {
+  view.busy = true;
+  render();
+  try {
+    for (;;) {
+      const job = await api("GET", `/api/job/${jobId}`);
+      $("preview-meter").value = Math.round((job.progress ?? 0) * 100);
+      if (job.state === "failed") { showError("preview-error", job.error_code); break; }
+      if (job.state === "done") break;
+      await sleep(400);
+    }
+    await refresh();
+  } catch (err) {
+    if (!handleFatal(err)) showError("preview-error", err.code);
+  } finally {
+    view.busy = false;
+    render();
+  }
+}
+
+async function startPreview() {
+  if (view.busy) return;
+  showError("preview-error", null);
+  try {
+    const { job } = await api("POST", "/api/preview");
+    await followPreview(job);
+  } catch (err) {
+    if (!handleFatal(err)) showError("preview-error", err.code);
+  }
+}
+
+$("preview-again").addEventListener("click", startPreview);
+
+function renderBuild() {
+  const state = view.session.state;
+  const build = state.build;
+  const chats = state.preview?.chats ?? [];
+  $("build-plan").replaceChildren(
+    factRow(t("s5.chats"), number(chats.length)),
+    factRow(t("s5.toAdd"), number(chats.reduce((sum, c) => sum + (c.to_insert ?? 0), 0))));
+  $("build-plan").hidden = Boolean(build);
+  $("build-start-row").hidden = Boolean(build) || view.busy;
+  $("build-progress").hidden = !view.busy;
+  $("build-summary").hidden = !build || view.busy;
+  if (build) {
+    $("n-size").textContent = fileSize(build.size);
+    $("n-messages").textContent = number(build.messages);
+    $("n-added").textContent = number(build.added);
+    $("n-path").textContent = build.path;
+  }
+  for (const id of ["build-start", "build-again", "download"]) $(id).disabled = view.busy;
+}
+
+function buildStatus(message) {
+  const merging = /^merge:(\d+):(\d+)$/.exec(message ?? "");
+  if (merging) return t("s5.merging", merging[1], merging[2]);
+  return message === "encrypt" ? t("s5.encrypting") : "";
+}
+
+async function followBuild(jobId) {
+  view.busy = true;
+  render();
+  try {
+    for (;;) {
+      const job = await api("GET", `/api/job/${jobId}`);
+      $("build-meter").value = Math.round((job.progress ?? 0) * 100);
+      $("build-status").textContent = buildStatus(job.message);
+      if (job.state === "failed") { showError("build-error", job.error_code); break; }
+      if (job.state === "done") break;
+      await sleep(400);
+    }
+    await refresh();
+  } catch (err) {
+    if (!handleFatal(err)) showError("build-error", err.code);
+  } finally {
+    view.busy = false;
+    render();
+  }
+}
+
+async function startBuild() {
+  if (view.busy) return;
+  showError("build-error", null);
+  try {
+    const { job } = await api("POST", "/api/build");
+    await followBuild(job);
+  } catch (err) {
+    if (!handleFatal(err)) showError("build-error", err.code);
+  }
+}
+
+// The download needs the token header, so it goes through fetch and a
+// temporary blob link instead of a plain <a href>.
+async function saveBackup() {
+  const button = $("download");
+  button.disabled = true;
+  button.textContent = t("s5.saving");
+  showError("build-error", null);
+  try {
+    const response = await fetch("/api/download", { headers: { "X-Warescue-Token": token }, cache: "no-store" });
+    if (!response.ok) throw new ApiError(response.status, "save_failed", "");
+    const url = URL.createObjectURL(await response.blob());
+    const link = element("a", { href: url, download: "msgstore.db.crypt15" });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    showError("build-error", "save_failed");
+  } finally {
+    button.disabled = false;
+    button.textContent = t("s5.save");
+  }
+}
+
+$("build-start").addEventListener("click", startBuild);
+$("build-again").addEventListener("click", startBuild);
+$("download").addEventListener("click", saveBackup);
+
+const CHECKLIST = ["media", "copy", "uninstall", "folder", "put", "install", "restore", "key", "fresh"];
+
+// Builds nodes instead of parsing HTML, so no string ever goes through innerHTML.
+function withCode(text) {
+  return text.split(/<code>(.*?)<\/code>/).map((part, i) =>
+    (i % 2 ? element("code", { textContent: part }) : document.createTextNode(part)));
+}
+
+function renderRestore() {
+  const state = view.session.state;
+  const ticked = new Set(state.checklist ?? []);
+  $("checklist").replaceChildren(...CHECKLIST.map((item) => {
+    const box = element("input", { type: "checkbox", id: `check-${item}`, checked: ticked.has(item) });
+    box.addEventListener("change", () => tick(item, box.checked));
+    const label = element("label", { htmlFor: box.id }, ...withCode(STRINGS[lang].checklist[item]));
+    return element("li", {}, box, label);
+  }));
+  $("cleanup-before").hidden = Boolean(state.cleaned);
+  $("cleanup-done").hidden = !state.cleaned;
+  $("wipe").disabled = !$("wipe-confirm").checked;
+}
+
+async function tick(item, done) {
+  try {
+    await api("POST", "/api/checklist", { item, done });
+    await refresh();
+  } catch (err) {
+    handleFatal(err);
+  }
+}
+
+$("cleanup").addEventListener("click", async (e) => {
+  e.currentTarget.disabled = true;
+  showError("cleanup-error", null);
+  try {
+    await api("POST", "/api/cleanup");
+    await refresh();
+  } catch (err) {
+    if (!handleFatal(err)) showError("cleanup-error", err.code);
+  } finally {
+    e.currentTarget.disabled = false;
+    render();
+  }
+});
+
+$("wipe-confirm").addEventListener("change", () => { $("wipe").disabled = !$("wipe-confirm").checked; });
+
+$("wipe").addEventListener("click", async (e) => {
+  e.currentTarget.disabled = true;
+  try {
+    await api("POST", "/api/wipe", { confirm: true });
+    safeStorage.set(sessionStorage, "warescue.token", "");
+    $("finished-workspace").parentElement.hidden = true;
+    closeWindow("view-finished");
+  } catch (err) {
+    e.currentTarget.disabled = false;
+    if (!handleFatal(err)) showError("cleanup-error", err.code);
+  }
+});
+
+$("next").addEventListener("click", () => (view.step === STEP_COUNT ? $("finish").click() : goTo(view.step + 1)));
+$("back").addEventListener("click", () => goTo(view.step - 1));
+
+$("lang").addEventListener("change", (e) => {
+  lang = e.target.value;
+  safeStorage.set(localStorage, "warescue.lang", lang);
+  applyLanguage();
+  updateKeyCount();
+});
+
+$("finish").addEventListener("click", async (e) => {
+  e.currentTarget.disabled = true;
+  try {
+    const { workspace } = await api("POST", "/api/finish");
+    safeStorage.set(sessionStorage, "warescue.token", "");
+    $("finished-workspace").textContent = workspace;
+    closeWindow("view-finished");
+  } catch (err) {
+    e.currentTarget.disabled = false;
+    handleFatal(err);
+  }
+});
+
+async function start() {
+  applyLanguage();
+  updateKeyCount();
+  if (!token) { handleFatal(new ApiError(0, "no_token", "")); return; }
+  try {
+    await refresh();
+  } catch (err) {
+    handleFatal(err);
+    return;
+  }
+  const s = view.session;
+  $("workspace").textContent = s.workspace;
+  view.step = Math.min(s.state.step ?? 1, s.max_step);
+  render();
+  const running = async (id) => {
+    const job = id ? await api("GET", `/api/job/${id}`).catch(() => null) : null;
+    return job && (job.state === "queued" || job.state === "running");
+  };
+  if (view.step === 2 && !s.state.database && await running(s.state.decrypt_job)) {
+    followDecrypt(s.state.decrypt_job);
+  } else if (view.step === 4 && !s.state.preview) {
+    if (await running(s.state.preview_job)) followPreview(s.state.preview_job);
+    else startPreview();
+  } else if (view.step === 5 && !s.state.build && await running(s.state.build_job)) {
+    followBuild(s.state.build_job);
+  }
+}
+
+start();
+</script>
+</body>
+</html>

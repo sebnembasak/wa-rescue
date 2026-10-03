@@ -1,0 +1,16 @@
+private/
+*.crypt12
+*.crypt14
+*.crypt15
+*.db
+*.db-*
+*.key
+_chat*.txt
+
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+
+.DS_Store
+.idea/

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "warescue"
+version = "0.3.0"
+description = "Inspect, decrypt and repair WhatsApp crypt15 backups"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "cryptography>=41",
+    "tzdata; sys_platform == 'win32'",   # Windows ships no IANA time zone database
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+warescue = "warescue.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"warescue.ui" = ["static/*.html"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
